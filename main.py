@@ -26,8 +26,9 @@ from api.app import create_app
 # The existing pure-logic rules and management (Phase 1 logic imported)
 from core.regime import RegimeClassifier
 from core.ensemble import compute_ensemble
-from core.position_tracker import PositionTracker
+from core.position_manager import PositionManager
 from core.risk import RiskManager
+from execution.order_engine import OrderEngine
 
 # Import Strategies
 from strategies.mtf import MomentumTrendFollowing
@@ -87,50 +88,26 @@ class TradingEngine:
     def __init__(self, state: StateManager):
         self.state = state
         self.running = False
-        
-        self.regime     = RegimeClassifier()
-        self.positions  = PositionTracker()
-        self.risk       = RiskManager()
+        self.regime = RegimeClassifier()
         
     async def run_forever(self, interval_s: int = 1):
-        """Main strategy loop: reads from Redis, computes signals, manages positions."""
+        """Main strategy loop: reads from Redis, computes signals, updates ensemble score."""
         self.running = True
-        log.info("🚀 Trading Engine Loop Started")
+        log.info("🧠 Brain Engine Loop Started")
         
-        start_capital = CAPITAL
-        current_capital = CAPITAL
-        
-        cycle = 0
         while self.running:
-            cycle += 1
             try:
-                # 1. Check daily drawdown
-                if self.risk.check_daily_drawdown(start_capital, current_capital):
-                    log.critical("🛑 HALTING ENGINE — daily drawdown hit")
-                    break
-
                 for symbol in SYMBOLS:
-                    await self._process_symbol(symbol, current_capital)
-
-                # Sync state positions to Redis for the API/Dashboard to read
-                for sym, pos in self.positions.get_all_positions().items():
-                    if pos:
-                        # Convert dataclass to dict
-                        await self.state.set_position(sym, pos.__dict__)
-
-                # Store risk state
-                total_heat = self.positions.total_heat(current_capital, current_capital)
-                await self.state.set("risk_state", {"total_heat": total_heat})
-
+                    await self._process_symbol(symbol)
+                    
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                log.error(f"Trading loop error: {e}")
+                log.error(f"BrainEngine loop error: {e}")
                 
             await asyncio.sleep(interval_s)
 
-    async def _process_symbol(self, symbol: str, capital: float):
-        # Read pre-computed data from Redis
+    async def _process_symbol(self, symbol: str):
         price = await self.state.get_float(f"price:{symbol}")
         f     = await self.state.get(f"features:{symbol}")
         df_1h = await self.state.get_df(f"ohlcv:1h:{symbol}", n=200)
@@ -138,21 +115,19 @@ class TradingEngine:
         if not price or not f or df_1h is None or len(df_1h) < 20:
             return
 
-        # 1. Regime Detection (We compute it from the up-to-date 1h df)
         regime_data = self.regime.classify(df_1h)
         regime_label = regime_data['regime']
         regime_conf  = regime_data['confidence']
-        
         await self.state.set(f"regime:{symbol}", regime_data)
 
-        # 2. Compute Algos (Phase 2 optimization: ideally algorithms read from 'f' dict
-        #    instead of pandas DF, but to keep Phase 1 algorithms working without rewrite,
-        #    we pass the pandas DF as before).
         signal_map = {}
         for name, strategy in ALL_STRATEGIES.items():
             try:
-                # Note: full implementation would adapt strategies to use `f` dict directly
-                sig = strategy.calculate_signal(df_1h, macro_trend="BULLISH", portfolio_value=capital)
+                if hasattr(strategy, 'calculate_signal_from_features'):
+                    sig = strategy.calculate_signal_from_features(f)
+                else:
+                    sig = strategy.calculate_signal(df_1h, macro_trend="BULLISH", portfolio_value=CAPITAL)
+                
                 if sig:
                     if 'confidence' not in sig:
                         sig['confidence'] = 0.5
@@ -160,45 +135,8 @@ class TradingEngine:
             except Exception:
                 pass
 
-        # 3. Ensemble Scorer
         ensemble = compute_ensemble(signal_map, regime_label, regime_conf)
-        score      = ensemble['final_score']
-        action     = ensemble['action']
-        conviction = ensemble['conviction']
-        
         await self.state.set(f"ensemble:{symbol}", ensemble)
-
-        # 4. Position Management
-        atr = f.get('atr_14_1h', price * 0.01)
-        pos_action = self.positions.update(symbol, price, atr, score)
-        
-        if pos_action['action'] == 'FLIP':
-            log.info(f"🔄 {symbol} POSITION FLIP → {pos_action['new_side']}")
-            self._open(symbol, score, conviction, price, atr, capital, force_side=pos_action['new_side'])
-            return
-            
-        if not self.positions.has_position(symbol) and action in ('LONG', 'SHORT'):
-            self._open(symbol, score, conviction, price, atr, capital)
-
-    def _open(self, symbol, score, conviction, price, atr, capital, force_side=None):
-        side = force_side if force_side else ('LONG' if score > 0 else 'SHORT')
-        sizing = self.risk.compute_position_size(capital, conviction, atr, price)
-        qty = sizing['qty']
-        
-        if qty <= 0:
-            return
-            
-        stop_dist = 1.5 * atr
-        stop = price - stop_dist if side == 'LONG' else price + stop_dist
-        tp1  = price + stop_dist * 2.0 if side == 'LONG' else price - stop_dist * 2.0
-        
-        current_heat = self.positions.total_heat(capital, capital)
-        if not self.risk.validate_trade(side, price, stop, tp1, qty, capital, current_heat):
-            return
-            
-        self.positions.open_position(symbol, side, price, qty, atr, score)
-        log.info(f"✅ {symbol} {side} OPENED @ {price:.4f} | score={score:+.2f}")
-
 
 # ── ORCHESTRATOR ──────────────────────────────────────────────────────────
 
@@ -211,7 +149,7 @@ async def start_api_server(state: StateManager):
 async def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(levelname)s: %(message)s')
     log.info("═" * 60)
-    log.info("🚀 QUANT ENGINE v5.0 | Async + Redis")
+    log.info("🚀 QUANT ENGINE v6.0 | Live Execution Async + Redis")
     log.info("═" * 60)
 
     # 1. Connect Redis
@@ -223,9 +161,16 @@ async def main():
     candle_feed = CandleFeedManager(SYMBOLS, ["1m", "5m", "15m", "1h", "4h"], state)
     features    = FeatureEngine(SYMBOLS, state)
     engine      = TradingEngine(state)
+    
+    risk_guardian = RiskManager(state)
+    position_manager = PositionManager(state)
+    order_engine = OrderEngine(state)
 
     # 3. Create Coroutines
     tasks = [
+        asyncio.create_task(risk_guardian.run_loop(interval=1)),
+        asyncio.create_task(position_manager.run_loop(interval=5)),
+        asyncio.create_task(order_engine.run_loop(interval=1)),
         asyncio.create_task(ws_feed.run_forever()),
         asyncio.create_task(candle_feed.run_forever()),
         asyncio.create_task(features.run_forever(interval_s=1)),
@@ -235,9 +180,10 @@ async def main():
 
     # Graceful shutdown handler
     loop = asyncio.get_event_loop()
+    components = [ws_feed, candle_feed, features, engine, risk_guardian, position_manager, order_engine]
     for sig in (signal.SIGINT, signal.SIGTERM):
-        with suppress(NotImplementedError):  # Windows doesn't support some signals
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(tasks, ws_feed, candle_feed, features, engine)))
+        with suppress(NotImplementedError):
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(tasks, *components)))
 
     log.info("✅ All systems initialized. Gathering tasks...")
     await asyncio.gather(*tasks)

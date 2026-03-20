@@ -5,9 +5,10 @@ Hard limits enforced before every trade.
 Portfolio heat tracking uses PositionTracker data.
 """
 
+import asyncio
 import logging
 
-log = logging.getLogger("RiskManager")
+log = logging.getLogger("RiskGuardian")
 
 
 class RiskManager:
@@ -28,9 +29,25 @@ class RiskManager:
     BASE_RISK_PCT        = 0.01    # 1% portfolio base risk per trade
     MAX_RISK_PCT         = 0.025   # 2.5% at full conviction
 
-    def __init__(self):
+    def __init__(self, state=None):
+        self.state = state
         self._daily_start_capital = None
         self._weekly_start_capital = None
+        self.running = False
+
+    async def run_loop(self, interval: int = 1):
+        self.running = True
+        log.info("🛡️ Risk Guardian Loop Started")
+        
+        while self.running:
+            try:
+                # Placeholder for global risk checks (drwadown halting, etc)
+                pass 
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log.error(f"RiskGuardian loop error: {e}")
+            await asyncio.sleep(interval)
 
     def compute_position_size(
         self,
