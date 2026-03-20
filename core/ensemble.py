@@ -15,6 +15,8 @@ import numpy as np
 
 # ── Base weights (sum to 1.0 after normalization) ─────────────────────────
 BASE_WEIGHTS = {
+    'XGBOOST':         0.25,
+    'LSTM':            0.25,
     'MTF':             0.10,
     'MTF_MACD':        0.07,
     'MEAN_REVERSION':  0.08,

@@ -51,6 +51,10 @@ from strategies.harmonic import HarmonicPatterns
 from strategies.liquidity_grabs import LiquidityGrabs
 from strategies.trend_exhaustion import TrendExhaustion
 
+# ML Models
+from ml.xgboost_model import XGBoostStrategy
+from ml.lstm_model import LSTMStrategy
+
 log = logging.getLogger("MAIN")
 
 ALL_STRATEGIES = {
@@ -74,6 +78,8 @@ ALL_STRATEGIES = {
     'HARMONIC':        HarmonicPatterns(),
     'LIQUIDITY_GRAB':  LiquidityGrabs(),
     'TREND_EXHAUST':   TrendExhaustion(),
+    'XGBOOST':         XGBoostStrategy(),
+    'LSTM':            LSTMStrategy(),
 }
 
 
