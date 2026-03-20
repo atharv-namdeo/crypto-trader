@@ -6,3 +6,4 @@ firebase-admin
 websocket-client
 requests
 scikit-learn
+ta==0.11.0
