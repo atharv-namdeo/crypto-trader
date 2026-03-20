@@ -1,0 +1,12 @@
+.env
+firebase_key.json
+trading_env/
+venv/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+.firebase/
+ml/model.pkl
+.gemini/
+dashboard/node_modules/

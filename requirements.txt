@@ -1,0 +1,8 @@
+ccxt
+pandas
+numpy
+python-dotenv
+firebase-admin
+websocket-client
+requests
+scikit-learn
