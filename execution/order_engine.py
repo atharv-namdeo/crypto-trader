@@ -107,12 +107,13 @@ class OrderEngine:
         log.info(f"📡 Processing Order Request: {action} {side} {qty} {market_sym}")
 
         if self.dry_run:
-            log.info(f"🔬 [DRY RUN] Would execute {action} {side} {qty} {market_sym}")
+            log.info(f"📝 PAPER TRADE: {side} {market_sym} qty={qty}")
             # Mock success by setting position state in Redis
             if action == 'OPEN':
                 pos = {
+                    'status': 'OPEN',
                     'symbol': symbol, 'side': side, 'entry': req.get('price'),
-                    'qty': qty, 'stop': req.get('stop'), 'tp': req.get('tp')
+                    'qty': qty, 'stop': req.get('stop'), 'tp1': req.get('tp')
                 }
                 await self.state.set_position(symbol, pos)
             elif action == 'CLOSE':

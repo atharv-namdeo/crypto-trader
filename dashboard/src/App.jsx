@@ -843,6 +843,12 @@ function App() {
 
   // ─── FIREBASE LISTENERS ─────────────────────────────────
   useEffect(() => {
+    // Railway WebSocket Connection
+    const WS_URL = import.meta.env?.VITE_API_URL || import.meta.env?.NEXT_PUBLIC_API_URL || "wss://worker-production-f4b2.up.railway.app/ws";
+    const ws = new WebSocket(WS_URL);
+    ws.onopen = () => console.log('✅ Connected to Railway WebSocket:', WS_URL);
+    ws.onerror = (e) => console.error('❌ Railway WS Error:', e);
+
     try {
       if (!db) return;
       const qTrades = query(collection(db, 'trades'), orderBy('timestamp', 'desc'), limit(20));
