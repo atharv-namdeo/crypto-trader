@@ -166,6 +166,7 @@ async def main():
     # 1. Connect Redis
     state = StateManager()
     await state.connect()
+    await state.debug_keys()  # Diagnostic: dump Redis keys on startup
 
     # 2. Init Managers
     ws_feed     = WebSocketManager(SYMBOLS, state)

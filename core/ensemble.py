@@ -140,6 +140,12 @@ def compute_ensemble(
     # Weighted average score
     raw_score = sum(signal_scores.values()) / total_signals
 
+    # Debug: log non-zero signals to identify which strategies are active
+    for name, score in signal_scores.items():
+        if score != 0:
+            log.info(f"  [SIGNAL] {name}={score:.3f}")
+    log.info(f"  [RAW_SCORE] raw_score={raw_score:.4f}")
+
     # ── FORCED DECISION — always pick one ──
     if long_votes > short_votes and long_votes > total_signals * 0.25:
         action = "BUY"

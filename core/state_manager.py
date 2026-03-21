@@ -172,3 +172,12 @@ class StateManager:
         except Exception as e:
             log.error(f"Redis subscribe error on {channel}: {e}")
             return None
+
+    async def debug_keys(self):
+        """Dump all Redis keys for diagnostic purposes."""
+        try:
+            keys = await self.redis.keys("*")
+            key_list = [k if isinstance(k, str) else k.decode() for k in keys[:20]]
+            log.info(f"[REDIS KEYS] {len(keys)} total: {key_list}")
+        except Exception as e:
+            log.error(f"Redis debug_keys error: {e}")

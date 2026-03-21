@@ -221,6 +221,11 @@ class FeatureEngine:
         # Actually LSTM needs historical features — let's let `ml/` handle history building.
 
         await self.state.publish(f"features_ready:{symbol}", "1")
+
+        # Diagnostic: log feature count
+        non_zero = {k: v for k, v in f.items() if v != 0}
+        log.info(f"[FEATURES] {symbol}: {len(non_zero)} non-zero "
+                 f"features out of {len(f)}")
         
     def stop(self):
         self.running = False
