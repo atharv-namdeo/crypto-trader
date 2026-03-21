@@ -11,7 +11,7 @@ import logging
 import asyncio
 import pandas as pd
 from typing import Any, Optional
-import redis.asyncio as redis
+import os
 from config import REDIS_URL
 
 log = logging.getLogger("StateManager")
@@ -19,14 +19,15 @@ log = logging.getLogger("StateManager")
 class StateManager:
     """Manages shared state via Redis with JSON serialization."""
     
-    def __init__(self, redis_url: str = REDIS_URL):
-        self.url = redis_url
+    def __init__(self, redis_url: str = None):
+        self.url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
         self.redis: Optional[redis.Redis] = None
         self._pubsub: Optional[redis.client.PubSub] = None
 
     async def connect(self):
         """Establish Redis connection."""
         try:
+            import redis.asyncio as redis
             self.redis = redis.from_url(self.url, decode_responses=True)
             await self.redis.ping()
             log.info(f"✅ Connected to Redis at {self.url}")

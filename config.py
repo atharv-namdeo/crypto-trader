@@ -17,7 +17,7 @@ TIMEFRAMES = ['5m', '15m', '1h']
 MACRO_TIMEFRAME = '4h'
 
 # Redis
-REDIS_URL = os.getenv('REDIS_URL', os.getenv('REDIS_PRIVATE_URL', 'redis://localhost:6379'))
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 
 def get_exchange(use_testnet=True):
