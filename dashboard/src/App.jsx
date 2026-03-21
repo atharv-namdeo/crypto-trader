@@ -851,13 +851,13 @@ function App() {
 
     try {
       if (!db) return;
-      const qTrades = query(collection(db, 'trades'), orderBy('timestamp', 'desc'), limit(20));
+      const qTrades = query(collection(db, 'trades'), limit(20));
       const unsubTrades = onSnapshot(qTrades, (s) => setTrades(s.docs.map(d => ({ id: d.id, ...d.data() }))));
 
-      const qSignals = query(collection(db, 'signals'), orderBy('timestamp', 'desc'), limit(10));
+      const qSignals = query(collection(db, 'signals'), limit(10));
       const unsubSignals = onSnapshot(qSignals, (s) => setSignals(s.docs.map(d => ({ id: d.id, ...d.data() }))));
 
-      const qEquity = query(collection(db, 'equity'), orderBy('timestamp', 'desc'), limit(50));
+      const qEquity = query(collection(db, 'equity'), limit(50));
       const unsubEquity = onSnapshot(qEquity, (s) => {
         const data = s.docs.map(d => {
           const dd = d.data();
