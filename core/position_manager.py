@@ -103,6 +103,18 @@ class PositionManager:
             "conviction": conviction,
         }
         await self.state.set_position(symbol, position)
+        
+        try:
+            from utils.firebase_client import log_trade
+            log_trade({
+                'symbol': symbol,
+                'direction': side,
+                'entry': price,
+                'qty': qty,
+                'strategy': 'ENSEMBLE'
+            })
+        except Exception as e:
+            self.log.warning(f"Could not sync open trade to dashboard: {e}")
 
         # Also publish order_request for order engine compatibility
         req = {
