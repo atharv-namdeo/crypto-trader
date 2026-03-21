@@ -185,6 +185,11 @@ async def main():
         with suppress(NotImplementedError):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(tasks, *components)))
 
+    # 4. Load Models explicitly in loop
+    for name, strategy in ALL_STRATEGIES.items():
+        if hasattr(strategy, 'load_model'):
+            await strategy.load_model()
+
     log.info("✅ All systems initialized. Gathering tasks...")
     await asyncio.gather(*tasks)
 

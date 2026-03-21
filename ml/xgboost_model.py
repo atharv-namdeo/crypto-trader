@@ -14,34 +14,24 @@ class XGBoostStrategy:
     def __init__(self):
         self.model_path = os.path.join(os.path.dirname(__file__), 'models', 'xgboost_btceth.pkl')
         self.model = None
-        self._load()
+        self.model_loaded = False
 
-    def _load(self):
-        import os
+    async def load_model(self):
+        import os, joblib
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "xgboost_btceth.pkl")
-        models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-        
-        log.warning(f"XGBoost looking at: {path}")
-        log.warning(f"ml/ contents: {os.listdir(os.path.dirname(os.path.abspath(__file__)))}")
+        log.warning(f"XGBoost path: {path}")
+        log.warning(f"File exists: {os.path.exists(path)}")
+        log.warning(f"File size: {os.path.getsize(path) if os.path.exists(path) else 'N/A'}")
         try:
-            log.warning(f"models/ contents: {os.listdir(models_dir)}")
+            self.model = joblib.load(path)
+            self.model_loaded = True
+            log.info("✅ XGBoost model loaded successfully")
         except Exception as e:
-            log.error(f"Could not list models/: {e}")
-
-        try:
-            if os.path.exists(path):
-                self.model = joblib.load(path)
-                log.info("✅ XGBoost model loaded successfully")
-            else:
-                log.warning(f"⚠️ XGBoost model NOT found at: {path}. Run trainer.py first.")
-        except FileNotFoundError:
-            log.error(f"❌ XGBoost model NOT found at: {path}")
-        except Exception as e:
-            log.error(f"❌ XGBoost load failed: {e}")
+            log.error(f"❌ XGBoost load failed: {type(e).__name__}: {e}")
 
     def calculate_signal_from_features(self, feature_dict: dict) -> dict:
         """Called by main orchestrator every cycle."""
-        if self.model is None:
+        if not getattr(self, 'model_loaded', False):
             return {'direction': 'NONE', 'confidence': 0.0}
 
         try:
