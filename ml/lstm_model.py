@@ -7,6 +7,7 @@ import os
 import torch
 import torch.nn as nn
 import logging
+import numpy as np
 from ml.feature_builder import build_feature_vector, FEATURE_KEYS
 
 log = logging.getLogger("LSTMInference")
@@ -27,7 +28,7 @@ class QuantLSTM(nn.Module):
 
 class LSTMStrategy:
     def __init__(self):
-        self.model_path = os.path.join(os.path.dirname(__file__), 'models', 'lstm.pth')
+        self.model_path = os.path.join(os.path.dirname(__file__), 'models', 'lstm_btceth.pth')
         self.model = None
         self.history = []  # rolling window of 60 vectors
         self.seq_len = 60
@@ -63,7 +64,7 @@ class LSTMStrategy:
 
             # Inference
             with torch.no_grad():
-                seq_tensor = torch.tensor(self.history, dtype=torch.float32).unsqueeze(0)  # batch_size=1
+                seq_tensor = torch.tensor(np.array(self.history), dtype=torch.float32).unsqueeze(0)  # batch_size=1
                 prob_up = float(self.model(seq_tensor).item())
 
             if prob_up > 0.55:
