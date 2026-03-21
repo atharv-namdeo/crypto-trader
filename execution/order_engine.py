@@ -7,7 +7,7 @@ import os
 import json
 import asyncio
 import logging
-from binance.client import AsyncClient
+from binance import AsyncClient
 from binance.exceptions import BinanceAPIException
 from core.state_manager import StateManager
 from config import SYMBOLS
