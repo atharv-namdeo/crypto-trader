@@ -52,7 +52,7 @@ def create_app(state: StateManager):
                     data[symbol] = {
                         "ensemble": await state.get(f"ensemble:{symbol}"),
                         "position": await state.get(f"position:{symbol}"),
-                        "price": await float(state.get_float(f"price:{symbol}") or 0.0),
+                        "price": float(await state.get_float(f"price:{symbol}") or 0.0),
                         "features": await state.get(f"features:{symbol}")
                     }
                 data["risk"] = await state.get("risk_state")
