@@ -20,8 +20,7 @@ class OrderEngine:
         self.running = False
         
         self.dry_run = os.getenv('DRY_RUN', 'true').lower() == 'true'
-        self.use_testnet = os.getenv('USE_TESTNET', 'true').lower() == 'true'
-        
+        self.use_testnet = True  # Forced to bypass geo-blocking        
         # Determine prefix for API keys
         prefix = 'BINANCE_TEST_' if self.use_testnet else 'BINANCE_'
         if not self.use_testnet and not os.getenv('BINANCE_API_KEY'):
@@ -65,10 +64,11 @@ class OrderEngine:
         self.running = True
         log.info(f"🚀 Started Order Engine (Dry Run: {self.dry_run})")
         
-        await self.init_client()
-        
         while self.running:
             try:
+                if not self.client:
+                    await self.init_client()
+                    
                 for symbol in SYMBOLS:
                     queue_key = f"order_request:{symbol}"
                     req = await self.state.get(queue_key)
@@ -80,7 +80,9 @@ class OrderEngine:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                log.error(f"OrderEngine polling error: {e}")
+                log.error(f"OrderEngine error: {e}, retrying in 30s")
+                self.client = None
+                await asyncio.sleep(30)
                 
             await asyncio.sleep(interval)
 

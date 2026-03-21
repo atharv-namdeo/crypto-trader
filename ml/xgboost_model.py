@@ -12,11 +12,16 @@ log = logging.getLogger("XGBoostInference")
 
 class XGBoostStrategy:
     def __init__(self):
-        self.model_path = os.path.join(os.path.dirname(__file__), 'models', 'xgboost.pkl')
+        self.model_path = os.path.join(os.path.dirname(__file__), 'models', 'xgboost_btceth.pkl')
         self.model = None
         self._load()
 
     def _load(self):
+        import os
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "xgboost_btceth.pkl")
+        log.warning(f"XGBoost looking at: {path}")
+        log.warning(f"ml/ contents: {os.listdir(os.path.dirname(os.path.abspath(__file__)))}")
+
         try:
             if os.path.exists(self.model_path):
                 self.model = joblib.load(self.model_path)

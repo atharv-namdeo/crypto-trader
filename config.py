@@ -41,8 +41,11 @@ def get_exchange(use_testnet=True):
     if use_testnet:
         try:
             exchange.set_sandbox_mode(True)
+            exchange.urls['api'] = {
+                'public': 'https://testnet.binancefuture.com/fapi/v1',
+                'private': 'https://testnet.binancefuture.com/fapi/v1',
+            }
         except Exception as e:
-            print(f"⚠️ Sandbox mode not supported, using production with DRY_RUN: {e}")
-            # Fall back to production endpoint but keep DRY_RUN active
-    
+            print(f"⚠️ Sandbox mode error: {e}")
+            
     return exchange

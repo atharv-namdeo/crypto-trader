@@ -21,13 +21,10 @@ class WebSocketManager:
         self.symbols = symbols
         self.state = state
         # We determine testnet based on exchange config or env
-        self.use_testnet = os.getenv("USE_TESTNET", "True").lower() in ('true', '1')
+        self.use_testnet = True  # Forced to bypass geo-blocking
         
         # Binance URLs
-        if self.use_testnet:
-            self.base_url = "wss://stream.binancefuture.com/ws"
-        else:
-            self.base_url = "wss://fstream.binance.com/ws"
+        self.base_url = "wss://stream.binancefuture.com/ws"
 
         self.running = False
         self._ws = None

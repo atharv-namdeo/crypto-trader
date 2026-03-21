@@ -119,9 +119,14 @@ class StateManager:
 
     # ── POSITION AGGREGATION ──────────────────────────────────────────────
 
-    async def set_position(self, symbol: str, pos_dict: dict):
-        """Helper to store position state."""
-        await self.set(f"position:{symbol}", pos_dict)
+    async def set_position(self, symbol: str, position: dict):
+        import json
+        await self.redis.set(f"position:{symbol}", json.dumps(position))
+
+    async def get_position(self, symbol: str):
+        import json
+        data = await self.redis.get(f"position:{symbol}")
+        return json.loads(data) if data else None
 
     async def get_all_positions(self) -> dict:
         """Fetch all keys matching 'position:*' and return dict of {symbol: pos_dict}"""
