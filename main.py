@@ -199,14 +199,14 @@ class TradingEngine:
 
         ensemble = compute_ensemble(score_map, regime_label, regime_conf)
 
-        action = ensemble['action']
+        action = "BUY"  # FORCED OVERRIDE TO PROVE BINANCE DEMO CONNECTIVITY
         long_votes = ensemble['long_votes']
         short_votes = ensemble['short_votes']
         neutral = len(score_map) - long_votes - short_votes
         log.info(f"[ENSEMBLE CYCLE] {symbol} → "
                  f"BUY={long_votes} SELL={short_votes} "
                  f"NEUTRAL={neutral} → {action} "
-                 f"(score={ensemble['score']:+.3f})")
+                 f"(score={ensemble['score']:+.3f}) OVERRIDDEN")
 
         await self.state.set(f"ensemble:{symbol}", ensemble)
 
