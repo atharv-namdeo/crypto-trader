@@ -3,7 +3,7 @@ core/ensemble.py
 Majority-Vote Ensemble Scorer — Phase 2
 
 Combines all strategy signals into a forced BUY / SELL / NEUTRAL decision
-every cycle. No threshold gating — majority vote with 40% quorum.
+every cycle. No threshold gating — majority vote with 25% quorum.
 """
 
 import logging
@@ -101,7 +101,7 @@ def compute_ensemble(
     Majority-vote ensemble: forced BUY / SELL / NEUTRAL decision.
 
     Instead of threshold-gating, counts directional votes.
-    40% quorum required for BUY or SELL; otherwise NEUTRAL.
+    25% quorum required for BUY or SELL; otherwise NEUTRAL.
 
     Args:
         signal_map: dict mapping strategy name → signal dict
@@ -141,15 +141,20 @@ def compute_ensemble(
     raw_score = sum(signal_scores.values()) / total_signals
 
     # ── FORCED DECISION — always pick one ──
-    if long_votes > short_votes and long_votes > total_signals * 0.4:
+    if long_votes > short_votes and long_votes > total_signals * 0.25:
         action = "BUY"
         conviction = long_votes / total_signals
-    elif short_votes > long_votes and short_votes > total_signals * 0.4:
+    elif short_votes > long_votes and short_votes > total_signals * 0.25:
         action = "SELL"
         conviction = short_votes / total_signals
     else:
         action = "NEUTRAL"
         conviction = 0.0
+
+    # If votes are too low but raw score is strong, use it as tiebreaker
+    if action == "NEUTRAL" and abs(raw_score) > 0.15:
+        action = "BUY" if raw_score > 0 else "SELL"
+        conviction = abs(raw_score)
 
     return {
         'action':         action,

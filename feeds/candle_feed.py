@@ -55,9 +55,12 @@ class CandleFeedManager:
                 await asyncio.sleep(5)
 
     async def _bootstrap_all(self):
-        """Fetch historical data on startup."""
+        """Fetch historical data on startup — pre-seed 200+ candles for all indicators."""
+        log.info("📊 Pre-seeding candle history for all symbols and timeframes...")
         for symbol in self.symbols:
             await self._update_symbol_timeframes(symbol, limit=500)
+            log.info(f"✅ Bootstrapped candle history for {symbol} "
+                     f"({len(self.timeframes)} timeframes, 500 candles each)")
             
     async def _update_symbol_timeframes(self, symbol: str, limit: int = 100):
         import aiohttp
