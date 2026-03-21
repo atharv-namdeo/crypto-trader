@@ -90,8 +90,13 @@ class PositionManager:
         atr = await self.state.get_float(f"atr:{symbol}") or price * 0.01
         stop = price - 1.5 * atr if side == "LONG" else price + 1.5 * atr
         tp1 = price + 3.0 * atr if side == "LONG" else price - 3.0 * atr
-        qty = 10.0 / price  # $10 per trade in paper mode
-
+        # Bypass MinQty limit on Binance
+        if 'BTC' in symbol:
+            qty = max(0.001, 100.0 / price)
+        elif 'ETH' in symbol:
+            qty = max(0.01, 100.0 / price)
+        else:
+            qty = 100.0 / price
         position = {
             "status": "OPEN",
             "side": side,
