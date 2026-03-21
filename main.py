@@ -111,14 +111,28 @@ class TradingEngine:
             log.info(f"Cycle completed. Waiting {interval_s}s...")
             
             try:
-                from config import CAPITAL
                 from utils.firebase_client import log_equity, log_balance
-                log_equity(CAPITAL)
-                log_balance([
-                    {"asset": "USDT", "balance": CAPITAL},
-                    {"asset": "BTC", "balance": 0.0},
-                    {"asset": "ETH", "balance": 0.0}
-                ])
+                # Fetch live Binance account data if available
+                acc = await self.state.get('binance:account')
+                if acc:
+                    total_equity = float(acc.get('totalWalletBalance', 0)) + float(acc.get('totalUnrealizedProfit', 0))
+                    assets = []
+                    for a in acc.get('assets', []):
+                        bal = float(a.get('walletBalance', 0))
+                        if bal > 0:
+                            assets.append({"asset": a['asset'], "balance": bal})
+                    
+                    if not assets:
+                        assets = [{"asset": "USDT", "balance": total_equity}]
+                        
+                    log_equity(total_equity)
+                    log_balance(assets)
+                else:
+                    # Fallback if account data isn't ready
+                    from config import CAPITAL
+                    log_equity(CAPITAL)
+                    log_balance([{"asset": "USDT", "balance": CAPITAL}])
+                    
             except Exception as e:
                 log.warning(f"Could not sync portfolio to dashboard: {e}")
 

@@ -64,12 +64,21 @@ class OrderEngine:
         self.running = True
         log.info(f"🚀 Started Order Engine (Dry Run: {self.dry_run})")
         
+        loops = 0
         while self.running:
             try:
                 if not self.dry_run:
                     if not self.client:
                         await self.init_client()
                     
+                    # Fetch real account data every 60 cycles
+                    if loops % 60 == 0:
+                        try:
+                            acc = await self.client.futures_account()
+                            await self.state.set('binance:account', acc)
+                        except Exception as e:
+                            log.warning(f"Could not fetch Binance account: {e}")
+                            
                 for symbol in SYMBOLS:
                     queue_key = f"order_request:{symbol}"
                     req = await self.state.get(queue_key)
@@ -78,6 +87,7 @@ class OrderEngine:
                         # Delete request after processing so it doesn't trigger again
                         await self.state.redis.delete(queue_key)
                         
+                loops += 1
             except asyncio.CancelledError:
                 break
             except Exception as e:
