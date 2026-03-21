@@ -19,17 +19,25 @@ class XGBoostStrategy:
     def _load(self):
         import os
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "xgboost_btceth.pkl")
+        models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+        
         log.warning(f"XGBoost looking at: {path}")
         log.warning(f"ml/ contents: {os.listdir(os.path.dirname(os.path.abspath(__file__)))}")
+        try:
+            log.warning(f"models/ contents: {os.listdir(models_dir)}")
+        except Exception as e:
+            log.error(f"Could not list models/: {e}")
 
         try:
-            if os.path.exists(self.model_path):
-                self.model = joblib.load(self.model_path)
-                log.info("✅ Loaded XGBoost model")
+            if os.path.exists(path):
+                self.model = joblib.load(path)
+                log.info("✅ XGBoost model loaded successfully")
             else:
-                log.warning("⚠️ XGBoost model not found. Run trainer.py first.")
+                log.warning(f"⚠️ XGBoost model NOT found at: {path}. Run trainer.py first.")
+        except FileNotFoundError:
+            log.error(f"❌ XGBoost model NOT found at: {path}")
         except Exception as e:
-            log.error(f"Failed to load XGBoost: {e}")
+            log.error(f"❌ XGBoost load failed: {e}")
 
     def calculate_signal_from_features(self, feature_dict: dict) -> dict:
         """Called by main orchestrator every cycle."""
