@@ -1,56 +1,32 @@
-import pandas as pd
-import utils.indicators as ta
+"""PIVOT_POINTS — Price position relative to calculated pivot levels."""
+import numpy as np
 from strategies.base import BaseStrategy
 
 class PivotPoints(BaseStrategy):
-    """
-    ALGO 14 — PIVOT POINTS (S1/R1 REVERSION)
-    Tier: INTRADAY / SCALP | Timeframe: 15m, 1h
-    Focus: Reversals from key institutional levels (S1, S2, R1, R2).
-    """
-    
     NAME = "PIVOT_POINTS"
-    TIER = "SCALP"
-    REGIME_GATE = ['MEAN_REVERTING', 'CHOPPY_NOISE']
-    
-    def calculate_signal(self, df: pd.DataFrame, portfolio_value: float = 1000, **kwargs) -> dict:
-        """
-        Input: 15m or 1h OHLCV DataFrame
-        """
-        if len(df) < 20:
-            return {'direction': 'NONE', 'reason': 'Insufficient data'}
 
-        # Calculate daily pivots from the current DF (simplified for intraday)
-        pivots = ta.pivot_points(df)
+    def calculate_signal(self, ohlcv: dict) -> float:
+        df = ohlcv.get('1h')
+        if df is None or len(df) < 24:
+            return 0.0
+
+        # Use last 24 bars as "previous session"
+        prev = df.iloc[-48:-24] if len(df) >= 48 else df.iloc[:len(df)//2]
+        if len(prev) < 5:
+            return 0.0
+
+        h = prev['high'].max()
+        l = prev['low'].min()
+        c = prev['close'].iloc[-1]
+        pivot = (h + l + c) / 3
+        r1 = 2 * pivot - l
+        s1 = 2 * pivot - h
+
         price = df['close'].iloc[-1]
-        atr = ta.atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
+        rng = r1 - s1 + 1e-9
 
-        # 1. Logic: LONG (Bounce from S1)
-        if price <= pivots['S1'] and price > pivots['S2']:
-            sl = pivots['S2'] - (0.1 * atr)
-            tp = pivots['P'] # Target the central pivot
-            qty = self.calculate_position_size(portfolio_value, 0.5, price, sl)
-            return {
-                'direction': 'LONG',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': f'Pivot Points: Bounce from S1 ({pivots["S1"]:.2f})'
-            }
+        # Score based on position: near S1 = buy, near R1 = sell
+        pos = (price - s1) / rng  # 0=at S1, 1=at R1
+        score = -(pos - 0.5) * 1.2  # convert to [-0.6, +0.6]
 
-        # 2. Logic: SHORT (Reject from R1)
-        if price >= pivots['R1'] and price < pivots['R2']:
-            sl = pivots['R2'] + (0.1 * atr)
-            tp = pivots['P']
-            qty = self.calculate_position_size(portfolio_value, 0.5, price, sl)
-            return {
-                'direction': 'SHORT',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': f'Pivot Points: Reject from R1 ({pivots["R1"]:.2f})'
-            }
-
-        return {'direction': 'NONE', 'reason': 'Not at Pivot levels'}
+        return self._clip(score)

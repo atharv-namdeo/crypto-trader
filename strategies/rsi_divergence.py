@@ -1,75 +1,34 @@
-import pandas as pd
+"""RSI_DIV — RSI level as continuous momentum signal."""
 import numpy as np
-import utils.indicators as ta
 from strategies.base import BaseStrategy
 
 class RSIDivergence(BaseStrategy):
-    """
-    ALGO 09 — RSI DIVERGENCE
-    Tier: SCALP / INTRADAY | Timeframe: 15m, 1h
-    Focus: Detecting trend exhaustion and reversals via price-momentum divergence.
-    """
-    
     NAME = "RSI_DIV"
-    TIER = "INTRADAY"
-    REGIME_GATE = ['MEAN_REVERTING', 'TRENDING_BULL', 'TRENDING_BEAR']
-    
-    def calculate_signal(self, df: pd.DataFrame, portfolio_value: float = 1000, **kwargs) -> dict:
-        """
-        Input: 15m or 1h OHLCV DataFrame
-        """
-        if len(df) < 60:
-            return {'direction': 'NONE', 'reason': 'Insufficient data'}
 
-        df = df.copy()
-        df['rsi'] = ta.rsi(df['close'], length=14)
-        df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
-        
-        # 1. Detect Pivots (Approximate)
-        # Using a simple peak/trough detector
-        df['price_high'] = (df['high'] == df['high'].rolling(10, center=True).max())
-        df['price_low'] = (df['low'] == df['low'].rolling(10, center=True).min())
-        df['rsi_high'] = (df['rsi'] == df['rsi'].rolling(10, center=True).max())
-        df['rsi_low'] = (df['rsi'] == df['rsi'].rolling(10, center=True).min())
+    def calculate_signal(self, ohlcv: dict) -> float:
+        df = ohlcv.get('1h')
+        if df is None or len(df) < 30:
+            return 0.0
+        close = df['close']
 
-        # Extract recent pivots
-        highs = df[df['price_high']].tail(2)
-        lows = df[df['price_low']].tail(2)
+        rsi = self._rsi(close, 14).iloc[-1]
 
-        if len(highs) < 2 or len(lows) < 2:
-            return {'direction': 'NONE', 'reason': 'No pivots found'}
+        # Simple RSI momentum: below 30 = buy, above 70 = sell, graded
+        score = -(rsi - 50) / 50  # ranges from +1 (rsi=0) to -1 (rsi=100)
 
-        price = df['close'].iloc[-1]
-        atr = df['atr'].iloc[-1]
+        # Check for divergence: price making new low but RSI not
+        if len(close) >= 20:
+            recent_price_low = close.iloc[-20:].min()
+            rsi_series = self._rsi(close, 14)
+            if close.iloc[-1] <= recent_price_low * 1.005:
+                rsi_at_low = rsi_series.iloc[-20:].min()
+                if rsi > rsi_at_low + 5:
+                    score += 0.3  # bullish divergence bonus
 
-        # 2. Bearish Divergence (Price HH, RSI LH)
-        if highs['high'].iloc[-1] > highs['high'].iloc[-2] and \
-           highs['rsi'].iloc[-1] < highs['rsi'].iloc[-2]:
-            sl = price + (1.5 * atr)
-            tp = price - (3.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'SHORT',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'RSI Bearish Divergence (Price HH, RSI LH)'
-            }
+            recent_price_high = close.iloc[-20:].max()
+            if close.iloc[-1] >= recent_price_high * 0.995:
+                rsi_at_high = rsi_series.iloc[-20:].max()
+                if rsi < rsi_at_high - 5:
+                    score -= 0.3  # bearish divergence bonus
 
-        # 3. Bullish Divergence (Price LL, RSI HL)
-        if lows['low'].iloc[-1] < lows['low'].iloc[-2] and \
-           lows['rsi'].iloc[-1] > lows['rsi'].iloc[-2]:
-            sl = price - (1.5 * atr)
-            tp = price + (3.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'LONG',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'RSI Bullish Divergence (Price LL, RSI HL)'
-            }
-
-        return {'direction': 'NONE', 'reason': 'No divergence'}
+        return self._clip(score)

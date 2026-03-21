@@ -1,57 +1,36 @@
-import pandas as pd
-import utils.indicators as ta
+"""TREND_EXHAUST — Trend exhaustion via RSI extremes + volume climax."""
+import numpy as np
 from strategies.base import BaseStrategy
 
 class TrendExhaustion(BaseStrategy):
-    """
-    ALGO 20 — TREND EXHAUSTION (CLIMAX REVERSAL)
-    Tier: INTRADAY / SWING | Timeframe: 1h, 4h
-    Focus: Detecting the end of a trend via volume climax + momentum divergence.
-    """
-    
     NAME = "TREND_EXHAUST"
-    TIER = "INTRADAY"
-    REGIME_GATE = ['TRENDING_BULL', 'TRENDING_BEAR', 'HIGH_VOLATILITY']
-    
-    def calculate_signal(self, df: pd.DataFrame, portfolio_value: float = 1000, **kwargs) -> dict:
-        if len(df) < 60:
-            return {'direction': 'NONE', 'reason': 'Insufficient data'}
 
-        df = df.copy()
-        df['rsi'] = ta.rsi(df['close'], length=14)
-        df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
-        df['vol_ma'] = df['volume'].rolling(window=20).mean()
-        
-        price = df['close'].iloc[-1]
-        rsi = df['rsi'].iloc[-1]
+    def calculate_signal(self, ohlcv: dict) -> float:
+        df = ohlcv.get('1h')
+        if df is None or len(df) < 30:
+            return 0.0
+        close = df['close']
+
+        rsi = self._rsi(close, 14).iloc[-1]
         vol = df['volume'].iloc[-1]
-        vol_ma = df['vol_ma'].iloc[-1]
-        atr = df['atr'].iloc[-1]
-        
-        # Volume Climax: Current Volume > 2.5x Average
-        vol_climax = vol > 2.5 * vol_ma
-        
-        # 1. Logic: Bearish Exhaustion (Uptrend ending)
-        # High RSI + Volume Climax + Bearish candle
-        bearish_candle = df['close'].iloc[-1] < df['open'].iloc[-1]
-        if rsi > 75 and vol_climax and bearish_candle:
-            sl = price + (2.0 * atr)
-            tp = price - (4.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'SHORT', 'entry': price, 'sl': sl, 'tp': tp,
-                'qty': qty, 'reason': f'Trend Exhaustion: Bearish Climax (RSI={rsi:.1f}, Vol={vol/vol_ma:.1f}x)'
-            }
+        vol_sma = df['volume'].rolling(20).mean().iloc[-1]
+        vol_ratio = vol / (vol_sma + 1e-9)
 
-        # 2. Logic: Bullish Exhaustion (Downtrend ending)
-        bullish_candle = df['close'].iloc[-1] > df['open'].iloc[-1]
-        if rsi < 25 and vol_climax and bullish_candle:
-            sl = price - (2.0 * atr)
-            tp = price + (4.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'LONG', 'entry': price, 'sl': sl, 'tp': tp,
-                'qty': qty, 'reason': f'Trend Exhaustion: Bullish Climax (RSI={rsi:.1f}, Vol={vol/vol_ma:.1f}x)'
-            }
+        score = 0.0
+        # RSI extreme + volume climax = exhaustion
+        if rsi > 70:
+            score -= (rsi - 70) / 30 * 0.5  # up to -0.5
+            if vol_ratio > 2.0:
+                score -= min(vol_ratio / 5, 0.4)  # climax reversal
+        elif rsi < 30:
+            score += (30 - rsi) / 30 * 0.5  # up to +0.5
+            if vol_ratio > 2.0:
+                score += min(vol_ratio / 5, 0.4)
 
-        return {'direction': 'NONE', 'reason': 'No exhaustion signal'}
+        # Candle body direction
+        body = close.iloc[-1] - df['open'].iloc[-1]
+        atr = self._atr(df, 14).iloc[-1]
+        body_score = body / (atr + 1e-9)
+        score += float(np.tanh(body_score * 0.3)) * 0.15
+
+        return self._clip(score)

@@ -1,67 +1,32 @@
-import pandas as pd
-import utils.indicators as ta
+"""ATR_EXPANSION — Volatility expansion with directional bias."""
+import numpy as np
 from strategies.base import BaseStrategy
 
 class ATRExpansion(BaseStrategy):
-    """
-    ALGO 12 — ATR VOLATILITY EXPANSION
-    Tier: SCALP / INTRADAY | Timeframe: 15m, 1h
-    Focus: Capturing explosive price breakouts after low-volatility periods.
-    """
-    
     NAME = "ATR_EXPANSION"
-    TIER = "SCALP"
-    REGIME_GATE = ['HIGH_VOLATILITY', 'BREAKOUT_PENDING']
-    
-    def calculate_signal(self, df: pd.DataFrame, portfolio_value: float = 1000, **kwargs) -> dict:
-        """
-        Input: 15m or 1h OHLCV DataFrame
-        """
-        if len(df) < 50:
-            return {'direction': 'NONE', 'reason': 'Insufficient data'}
 
-        df = df.copy()
-        # 1. Indicators
-        df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
-        df['atr_ma'] = df['atr'].rolling(window=20).mean()
-        df['ema_20'] = ta.ema(df['close'], length=20)
-        
-        # Latest values
-        price = df['close'].iloc[-1]
-        atr = df['atr'].iloc[-1]
-        atr_ma = df['atr_ma'].iloc[-1]
-        ema_20 = df['ema_20'].iloc[-1]
-        
-        # 2. Volatility Expansion Check
-        # Condition: Current ATR > 1.5x Average ATR (Vol Spike)
-        vol_spike = atr > 1.5 * atr_ma
+    def calculate_signal(self, ohlcv: dict) -> float:
+        df = ohlcv.get('1h')
+        if df is None or len(df) < 30:
+            return 0.0
+        close = df['close']
 
-        # 3. Logic: LONG
-        if vol_spike and price > ema_20:
-            sl = price - (2.0 * atr)
-            tp = price + (4.0 * atr) # 2:1 RR
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'LONG',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'ATR Volatility Expansion + Price > EMA 20'
-            }
+        atr = self._atr(df, 14)
+        atr_sma = atr.rolling(20).mean()
+        current_atr = atr.iloc[-1]
+        avg_atr = atr_sma.iloc[-1]
 
-        # 4. Logic: SHORT
-        if vol_spike and price < ema_20:
-            sl = price + (2.0 * atr)
-            tp = price - (4.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'SHORT',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'ATR Volatility Expansion + Price < EMA 20'
-            }
+        # Vol expansion ratio
+        vol_ratio = current_atr / (avg_atr + 1e-9)
 
-        return {'direction': 'NONE', 'reason': 'No Vol expansion'}
+        # Direction from EMA
+        ema20 = close.ewm(span=20).mean().iloc[-1]
+        direction = 1.0 if close.iloc[-1] > ema20 else -1.0
+
+        # Score: higher vol expansion = stronger signal in trend direction
+        if vol_ratio > 1.5:
+            score = direction * min(vol_ratio / 3.0, 0.8)
+        else:
+            score = direction * 0.1  # weak directional bias
+
+        return self._clip(score)

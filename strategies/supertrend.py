@@ -1,67 +1,37 @@
-import pandas as pd
-import utils.indicators as ta
+"""SUPERTREND — ATR-based trend bands direction and strength."""
+import numpy as np
 from strategies.base import BaseStrategy
 
 class SupertrendStrategy(BaseStrategy):
-    """
-    ALGO 16 — SUPERTREND (TREND FOLLOWING)
-    Tier: INTRADAY / SWING | Timeframe: 1h, 4h
-    Focus: High-confidence trend confirmation using ATR-adjusted price bands.
-    """
-    
     NAME = "SUPERTREND"
-    TIER = "INTRADAY"
-    REGIME_GATE = ['TRENDING_BULL', 'TRENDING_BEAR', 'BREAKOUT_PENDING']
-    
-    def calculate_signal(self, df: pd.DataFrame, portfolio_value: float = 1000, **kwargs) -> dict:
-        """
-        Input: 1h or 4h OHLCV DataFrame
-        """
-        if len(df) < 50:
-            return {'direction': 'NONE', 'reason': 'Insufficient data'}
 
-        df = df.copy()
-        # 1. Indicator
-        st = ta.supertrend(df, period=10, multiplier=3)
-        df['st_upper'] = st['upper']
-        df['st_lower'] = st['lower']
-        df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+    def calculate_signal(self, ohlcv: dict) -> float:
+        df = ohlcv.get('1h')
+        if df is None or len(df) < 30:
+            return 0.0
+        close = df['close']
 
-        # Latest values
-        price = df['close'].iloc[-1]
-        prev_price = df['close'].iloc[-2]
-        upper = df['st_upper'].iloc[-1]
-        lower = df['st_lower'].iloc[-1]
-        prev_upper = df['st_upper'].iloc[-2]
-        prev_lower = df['st_lower'].iloc[-2]
-        atr = df['atr'].iloc[-1]
+        atr = self._atr(df, 10)
+        hl2 = (df['high'] + df['low']) / 2
+        upper = hl2 + 3 * atr
+        lower = hl2 - 3 * atr
 
-        # 2. Logic: LONG (Price crosses above Upper Band - Breakout)
-        if prev_price <= prev_upper and price > upper:
-            sl = lower # Theoretical lower band as SL
-            tp = price + (4.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'LONG',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'Supertrend: Bullish Breakout'
-            }
+        price = close.iloc[-1]
+        upper_val = upper.iloc[-1]
+        lower_val = lower.iloc[-1]
+        mid = (upper_val + lower_val) / 2
 
-        # 3. Logic: SHORT (Price crosses below Lower Band)
-        if prev_price >= prev_lower and price < lower:
-            sl = upper
-            tp = price - (4.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'SHORT',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'Supertrend: Bearish Breakout'
-            }
+        # Position relative to supertrend bands
+        if price > upper_val:
+            # Strong bullish: above upper band
+            dist = (price - upper_val) / (atr.iloc[-1] + 1e-9)
+            score = 0.4 + min(dist * 0.2, 0.4)
+        elif price < lower_val:
+            # Strong bearish: below lower band
+            dist = (lower_val - price) / (atr.iloc[-1] + 1e-9)
+            score = -(0.4 + min(dist * 0.2, 0.4))
+        else:
+            # Within bands: directional based on position
+            score = (price - mid) / (upper_val - lower_val + 1e-9) * 0.5
 
-        return {'direction': 'NONE', 'reason': 'Within Supertrend bands'}
+        return self._clip(score)

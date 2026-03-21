@@ -1,70 +1,46 @@
-import pandas as pd
-import utils.indicators as ta
+"""ICHIMOKU — Cloud-based trend direction and strength."""
+import numpy as np
 from strategies.base import BaseStrategy
 
 class IchimokuCloud(BaseStrategy):
-    """
-    ALGO 11 — ICHIMOKU CLOUD (KUMO BREAKOUT)
-    Tier: INTRADAY / SWING | Timeframe: 1h, 4h
-    Focus: Capturing major trends confirmed by the Ichimoku equilibrium system.
-    """
-    
     NAME = "ICHIMOKU"
-    TIER = "INTRADAY"
-    REGIME_GATE = ['TRENDING_BULL', 'TRENDING_BEAR', 'BREAKOUT_PENDING']
-    
-    def calculate_signal(self, df: pd.DataFrame, portfolio_value: float = 1000, **kwargs) -> dict:
-        """
-        Input: 1h or 4h OHLCV DataFrame
-        """
-        if len(df) < 52:
-            return {'direction': 'NONE', 'reason': 'Insufficient data'}
 
-        df = df.copy()
-        # 1. Indicator
-        ich = ta.ichimoku(df)
-        df['tenkan'] = ich['tenkan_sen']
-        df['kijun'] = ich['kijun_sen']
-        df['span_a'] = ich['senkou_span_a']
-        df['span_b'] = ich['senkou_span_b']
-        df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+    def calculate_signal(self, ohlcv: dict) -> float:
+        df = ohlcv.get('1h')
+        if df is None or len(df) < 52:
+            return 0.0
+        high, low, close = df['high'], df['low'], df['close']
 
-        # Latest values
-        price = df['close'].iloc[-1]
-        tenkan = df['tenkan'].iloc[-1]
-        kijun = df['kijun'].iloc[-1]
-        span_a = df['span_a'].iloc[-1]
-        span_b = df['span_b'].iloc[-1]
-        atr = df['atr'].iloc[-1]
+        # Tenkan-sen (9-period)
+        tenkan = (high.rolling(9).max() + low.rolling(9).min()) / 2
+        # Kijun-sen (26-period)
+        kijun = (high.rolling(26).max() + low.rolling(26).min()) / 2
+        # Senkou Span A & B
+        span_a = ((tenkan + kijun) / 2).shift(26)
+        span_b = ((high.rolling(52).max() + low.rolling(52).min()) / 2).shift(26)
 
-        # 2. Logic: LONG (Kumo Breakout)
-        # Condition: Price > Cloud + Tenkan > Kijun + Bullish Cloud
-        if price > max(span_a, span_b) and tenkan > kijun and span_a > span_b:
-            sl = kijun # Use Kijun as SL for trend integrity
-            tp = price + (4.0 * atr) # 2:1 RR approx
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'LONG',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'Ichimoku: Bullish Kumo Breakout + Tenkan/Kijun Confluence'
-            }
+        price = close.iloc[-1]
+        t = tenkan.iloc[-1]
+        k = kijun.iloc[-1]
+        sa = span_a.iloc[-1] if not np.isnan(span_a.iloc[-1]) else price
+        sb = span_b.iloc[-1] if not np.isnan(span_b.iloc[-1]) else price
+        cloud_top = max(sa, sb)
+        cloud_bot = min(sa, sb)
 
-        # 3. Logic: SHORT (Kumo Breakout)
-        # Condition: Price < Cloud + Tenkan < Kijun + Bearish Cloud
-        if price < min(span_a, span_b) and tenkan < kijun and span_a < span_b:
-            sl = kijun
-            tp = price - (4.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'SHORT',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'Ichimoku: Bearish Kumo Breakout + Tenkan/Kijun Confluence'
-            }
+        score = 0.0
+        # Price vs cloud
+        if price > cloud_top: score += 0.35
+        elif price < cloud_bot: score -= 0.35
+        # Tenkan vs Kijun
+        if t > k: score += 0.25
+        else: score -= 0.25
+        # Cloud is bullish (span_a > span_b)
+        if sa > sb: score += 0.15
+        else: score -= 0.15
+        # Distance from cloud as conviction
+        cloud_mid = (cloud_top + cloud_bot) / 2
+        atr = self._atr(df, 14).iloc[-1]
+        dist = (price - cloud_mid) / (atr + 1e-9)
+        score += float(np.tanh(dist * 0.1)) * 0.25
 
-        return {'direction': 'NONE', 'reason': 'No Ichimoku signal'}
+        return self._clip(score)

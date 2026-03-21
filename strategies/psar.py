@@ -1,63 +1,31 @@
-import pandas as pd
-import utils.indicators as ta
+"""PSAR — Parabolic SAR trend direction and distance."""
+import numpy as np
 from strategies.base import BaseStrategy
 
 class ParabolicSAR(BaseStrategy):
-    """
-    ALGO 15 — PARABOLIC SAR (CONTINUATION)
-    Tier: INTRADAY / SWING | Timeframe: 1h, 4h
-    Focus: Riding trends with a robust trailing stop-loss mechanism.
-    """
-    
     NAME = "PSAR"
-    TIER = "INTRADAY"
-    REGIME_GATE = ['TRENDING_BULL', 'TRENDING_BEAR']
-    
-    def calculate_signal(self, df: pd.DataFrame, portfolio_value: float = 1000, **kwargs) -> dict:
-        """
-        Input: 1h or 4h OHLCV DataFrame
-        """
-        if len(df) < 50:
-            return {'direction': 'NONE', 'reason': 'Insufficient data'}
 
-        df = df.copy()
-        # 1. Indicator
-        df['psar'] = ta.psar(df)
-        df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+    def calculate_signal(self, ohlcv: dict) -> float:
+        df = ohlcv.get('1h')
+        if df is None or len(df) < 30:
+            return 0.0
+        close = df['close']
 
-        # Latest values
-        price = df['close'].iloc[-1]
-        prev_price = df['close'].iloc[-2]
-        sar = df['psar'].iloc[-1]
-        prev_sar = df['psar'].iloc[-2]
-        atr = df['atr'].iloc[-1]
+        # Simple PSAR approximation using ATR-based trailing stop
+        atr = self._atr(df, 14)
+        ema = close.ewm(span=14).mean()
+        atr_val = atr.iloc[-1]
+        price = close.iloc[-1]
+        ema_val = ema.iloc[-1]
 
-        # 2. Logic: LONG (SAR flips below price)
-        if prev_price < prev_sar and price > sar:
-            sl = sar # PSAR is the stop loss
-            tp = price + (4.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'LONG',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'PSAR: Bullish Flip (SAR < Price)'
-            }
+        # If price > EMA → uptrend (SAR below), else downtrend
+        if price > ema_val:
+            sar = ema_val - 2 * atr_val
+            dist = (price - sar) / (atr_val + 1e-9)
+            score = min(dist * 0.15, 0.8)
+        else:
+            sar = ema_val + 2 * atr_val
+            dist = (sar - price) / (atr_val + 1e-9)
+            score = -min(dist * 0.15, 0.8)
 
-        # 3. Logic: SHORT (SAR flips above price)
-        if prev_price > prev_sar and price < sar:
-            sl = sar
-            tp = price - (4.0 * atr)
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'SHORT',
-                'entry': price,
-                'sl': sl,
-                'tp': tp,
-                'qty': qty,
-                'reason': 'PSAR: Bearish Flip (SAR > Price)'
-            }
-
-        return {'direction': 'NONE', 'reason': 'No PSAR flip'}
+        return self._clip(score)

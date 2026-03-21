@@ -1,59 +1,36 @@
-import pandas as pd
-import utils.indicators as ta
+"""GANN_FAN — Price position relative to Gann retracement levels."""
+import numpy as np
 from strategies.base import BaseStrategy
 
 class GANNFan(BaseStrategy):
-    """
-    ALGO 17 — GANN FAN (ANGLE-BASED S/R)
-    Tier: SWING | Timeframe: 4h, 1D
-    Focus: Price-time geometry using GANN angles for dynamic S/R.
-    """
-    
     NAME = "GANN_FAN"
-    TIER = "SWING"
-    REGIME_GATE = ['TRENDING_BULL', 'TRENDING_BEAR']
-    
-    def calculate_signal(self, df: pd.DataFrame, portfolio_value: float = 1000, **kwargs) -> dict:
-        if len(df) < 100:
-            return {'direction': 'NONE', 'reason': 'Insufficient data'}
 
-        df = df.copy()
-        # 1. Determine Major Swing
-        swing_low_idx = df['low'].rolling(100).apply(lambda x: x.argmin(), raw=True).iloc[-1]
-        swing_high_idx = df['high'].rolling(100).apply(lambda x: x.argmax(), raw=True).iloc[-1]
-        
-        swing_low = df['low'].iloc[-100:].min()
-        swing_high = df['high'].iloc[-100:].max()
-        price_range = swing_high - swing_low
-        
-        if price_range == 0: return {'direction': 'NONE'}
-        
+    def calculate_signal(self, ohlcv: dict) -> float:
+        df = ohlcv.get('4h')
+        if df is None or len(df) < 50:
+            df = ohlcv.get('1h')
+        if df is None or len(df) < 50:
+            return 0.0
+
+        recent = df.tail(100) if len(df) >= 100 else df
+        swing_low = recent['low'].min()
+        swing_high = recent['high'].max()
+        rng = swing_high - swing_low
+        if rng < 1e-9:
+            return 0.0
+
         price = df['close'].iloc[-1]
-        atr = ta.atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
-        
-        # 2. GANN Levels (1x1 = 45deg, simplified as % retracements)
-        gann_1x1 = swing_low + (price_range * 0.50)  # 50% angle
-        gann_1x2 = swing_low + (price_range * 0.25)  # 25% angle
-        gann_2x1 = swing_low + (price_range * 0.75)  # 75% angle
-        
-        # 3. Logic: LONG (Price bounces off 1x2 support)
-        if price <= gann_1x2 * 1.01 and price >= gann_1x2 * 0.99:
-            sl = swing_low - (0.5 * atr)
-            tp = gann_1x1
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'LONG', 'entry': price, 'sl': sl, 'tp': tp,
-                'qty': qty, 'reason': f'GANN: Bounce from 1x2 ({gann_1x2:.2f})'
-            }
+        # Gann levels at 25%, 50%, 75%
+        gann_25 = swing_low + rng * 0.25
+        gann_50 = swing_low + rng * 0.50
+        gann_75 = swing_low + rng * 0.75
 
-        # 4. Logic: SHORT (Price rejects 2x1 resistance)
-        if price >= gann_2x1 * 0.99 and price <= gann_2x1 * 1.01:
-            sl = swing_high + (0.5 * atr)
-            tp = gann_1x1
-            qty = self.calculate_position_size(portfolio_value, 1.0, price, sl)
-            return {
-                'direction': 'SHORT', 'entry': price, 'sl': sl, 'tp': tp,
-                'qty': qty, 'reason': f'GANN: Reject from 2x1 ({gann_2x1:.2f})'
-            }
+        # Score: near 25% = buy zone, near 75% = sell zone, 50% = neutral
+        pos = (price - swing_low) / rng  # 0 to 1
+        score = -(pos - 0.5) * 1.0  # centered at 0.5 → [-0.5, +0.5]
 
-        return {'direction': 'NONE', 'reason': 'Not at GANN level'}
+        # Strengthen near extreme Gann levels
+        if price < gann_25: score += 0.2
+        elif price > gann_75: score -= 0.2
+
+        return self._clip(score)

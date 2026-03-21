@@ -110,53 +110,60 @@ class TradingEngine:
 
     async def _process_symbol(self, symbol: str):
         price = await self.state.get_float(f"price:{symbol}")
-        f     = await self.state.get(f"features:{symbol}")
         df_1h = await self.state.get_df(f"ohlcv:1h:{symbol}", n=200)
-        
-        if not price or not f or df_1h is None or len(df_1h) < 20:
+
+        if not price or df_1h is None or len(df_1h) < 20:
             return
+
+        # Build OHLCV dict for all timeframes
+        ohlcv = {
+            '1m':  await self.state.get_df(f"ohlcv:1m:{symbol}", n=200),
+            '5m':  await self.state.get_df(f"ohlcv:5m:{symbol}", n=200),
+            '15m': await self.state.get_df(f"ohlcv:15m:{symbol}", n=200),
+            '1h':  df_1h,
+            '4h':  await self.state.get_df(f"ohlcv:4h:{symbol}", n=200),
+        }
 
         regime_data = self.regime.classify(df_1h)
         regime_label = regime_data['regime']
         regime_conf  = regime_data['confidence']
         await self.state.set(f"regime:{symbol}", regime_data)
 
-        signal_map = {}
-        _keys_logged = getattr(self, '_keys_logged', False)
-        if not _keys_logged:
-            log.info(f"[FEATURE KEYS] {list(f.keys())}")
-            self._keys_logged = True
+        # Features dict only needed for ML models
+        f = await self.state.get(f"features:{symbol}")
 
+        score_map = {}
         for name, strategy in ALL_STRATEGIES.items():
             try:
                 if hasattr(strategy, 'calculate_signal_from_features'):
-                    sig = strategy.calculate_signal_from_features(f)
-                else:
-                    sig = strategy.calculate_signal(df_1h, macro_trend="BULLISH", portfolio_value=CAPITAL)
-                
-                if sig:
+                    # ML models: convert dict → float score
+                    sig = strategy.calculate_signal_from_features(f or {})
                     direction = sig.get('direction', 'NONE')
-                    if 'confidence' not in sig:
-                        sig['confidence'] = 0.5
-                    signal_map[name] = sig
-                    log.info(f"  [STRATEGY] {name} → {direction} "
-                             f"conf={sig.get('confidence', 0):.2f} "
-                             f"reason={sig.get('reason', 'N/A')}")
+                    conf = sig.get('confidence', 0.0)
+                    if direction == 'LONG':
+                        score_map[name] = conf
+                    elif direction == 'SHORT':
+                        score_map[name] = -conf
+                    else:
+                        score_map[name] = 0.0
                 else:
-                    log.info(f"  [STRATEGY] {name} → returned None/empty")
+                    # Rule-based: returns float directly
+                    s = strategy.calculate_signal(ohlcv)
+                    score_map[name] = float(s) if s else 0.0
             except Exception as e:
                 log.warning(f"  [STRATEGY] {name} → ERROR: {e}")
+                score_map[name] = 0.0
 
-        ensemble = compute_ensemble(signal_map, regime_label, regime_conf)
+        ensemble = compute_ensemble(score_map, regime_label, regime_conf)
 
-        # Task 5: Log every ensemble cycle with vote counts
         action = ensemble['action']
         long_votes = ensemble['long_votes']
         short_votes = ensemble['short_votes']
-        neutral = len(signal_map) - long_votes - short_votes
+        neutral = len(score_map) - long_votes - short_votes
         log.info(f"[ENSEMBLE CYCLE] {symbol} → "
                  f"BUY={long_votes} SELL={short_votes} "
-                 f"NEUTRAL={neutral} → {action}")
+                 f"NEUTRAL={neutral} → {action} "
+                 f"(score={ensemble['score']:+.3f})")
 
         await self.state.set(f"ensemble:{symbol}", ensemble)
 

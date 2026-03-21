@@ -1,40 +1,48 @@
-from abc import ABC, abstractmethod
-import pandas as pd
+"""
+strategies/base.py
+Base class for all strategies — Phase 2 (Score-based)
+"""
 
-class BaseStrategy(ABC):
-    """
-    Standard interface for all Algorithms in the Top 20 System.
-    """
-    
+import numpy as np
+
+
+class BaseStrategy:
+    """All strategies return a float score ∈ [-1.0, +1.0]."""
+
     NAME = "Base"
-    TIER = "INTRADAY"
-    REGIME_GATE = []  # List of regimes where this algo is active
-    
-    def __init__(self, config=None):
-        self.config = config or {}
-    
-    @abstractmethod
-    def calculate_signal(self, df: pd.DataFrame) -> dict:
-        """
-        Processes OHLCV data and returns a signal dictionary.
-        Returns: { 'symbol': str, 'direction': 'LONG'|'SHORT'|'NONE', 'entry': float, 'sl': float, 'tp': float, 'reason': str }
-        """
-        pass
 
-    def calculate_position_size(self, portfolio_value: float, risk_pct: float, entry: float, stop_loss: float) -> float:
+    def calculate_signal(self, ohlcv: dict) -> float:
         """
-        Risk-based position sizing: (portfolio * risk) / stop_distance
+        Args:
+            ohlcv: {
+                '1m':  DataFrame [open, high, low, close, volume],
+                '5m':  DataFrame,
+                '15m': DataFrame,
+                '1h':  DataFrame,
+                '4h':  DataFrame,
+            }
+        Returns:
+            float between -1.0 (strong sell) and +1.0 (strong buy)
         """
-        if abs(entry - stop_loss) == 0:
-            return 0.0
-            
-        risk_amount = portfolio_value * (risk_pct / 100)
-        stop_distance = abs(entry - stop_loss)
-        
-        return risk_amount / stop_distance
+        return 0.0
 
-    def is_compatible(self, current_regime: str) -> bool:
-        """
-        Checks if the strategy is active in the current market regime.
-        """
-        return current_regime in self.REGIME_GATE
+    @staticmethod
+    def _clip(score: float) -> float:
+        return float(np.clip(score, -1.0, 1.0))
+
+    @staticmethod
+    def _rsi(series, period=14):
+        delta = series.diff()
+        gain = delta.clip(lower=0).rolling(period).mean()
+        loss = (-delta.clip(upper=0)).rolling(period).mean()
+        rs = gain / (loss + 1e-9)
+        return 100 - (100 / (1 + rs))
+
+    @staticmethod
+    def _atr(df, period=14):
+        hl = df['high'] - df['low']
+        hc = (df['high'] - df['close'].shift()).abs()
+        lc = (df['low'] - df['close'].shift()).abs()
+        import pandas as pd
+        tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
+        return tr.rolling(period).mean()
