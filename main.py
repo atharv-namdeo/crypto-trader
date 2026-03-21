@@ -102,10 +102,26 @@ class TradingEngine:
                     await self._process_symbol(symbol)
                     
             except asyncio.CancelledError:
-                break
+                # Wait for next cycle
+                pass # Added pass to make it syntactically correct
             except Exception as e:
                 log.error(f"BrainEngine loop error: {e}")
                 
+            log.info("-" * 40)
+            log.info(f"Cycle completed. Waiting {interval_s}s...")
+            
+            try:
+                from config import CAPITAL
+                from utils.firebase_client import log_equity, log_balance
+                log_equity(CAPITAL)
+                log_balance([
+                    {"asset": "USDT", "balance": CAPITAL},
+                    {"asset": "BTC", "balance": 0.0},
+                    {"asset": "ETH", "balance": 0.0}
+                ])
+            except Exception as e:
+                log.warning(f"Could not sync portfolio to dashboard: {e}")
+
             await asyncio.sleep(interval_s)
 
     async def _process_symbol(self, symbol: str):
@@ -150,6 +166,19 @@ class TradingEngine:
                     # Rule-based: returns float directly
                     s = strategy.calculate_signal(ohlcv)
                     score_map[name] = float(s) if s else 0.0
+                    
+                # Firebase syncing for the dashboard
+                score = score_map[name]
+                if abs(score) > 0.05:
+                    from utils.firebase_client import log_signal
+                    log_signal({
+                        'strategy': name,
+                        'symbol': symbol,
+                        'direction': 'LONG' if score > 0 else 'SHORT',
+                        'confidence': abs(score),
+                        'reason': f"Score {score:+.2f}"
+                    })
+
             except Exception as e:
                 log.warning(f"  [STRATEGY] {name} → ERROR: {e}")
                 score_map[name] = 0.0

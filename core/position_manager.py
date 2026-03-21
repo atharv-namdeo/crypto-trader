@@ -138,6 +138,21 @@ class PositionManager:
         position['status'] = 'CLOSED'
         position['exit_price'] = price
         position['pnl'] = pnl
+        
+        try:
+            from utils.firebase_client import log_trade
+            log_trade({
+                'symbol': symbol,
+                'direction': side,
+                'entry': entry,
+                'exit': price,
+                'qty': qty,
+                'pnl': pnl,
+                'strategy': 'ENSEMBLE'
+            })
+        except Exception as e:
+            self.log.warning(f"Could not sync closed trade to dashboard: {e}")
+
         position['close_reason'] = reason
         await self.state.set_position(symbol, position)
 
