@@ -97,6 +97,7 @@ class TradingEngine:
         
         while self.running:
             try:
+                log.info("[ENSEMBLE] Running scorer cycle...")
                 for symbol in SYMBOLS:
                     await self._process_symbol(symbol)
                     
@@ -136,6 +137,9 @@ class TradingEngine:
                 pass
 
         ensemble = compute_ensemble(signal_map, regime_label, regime_conf)
+        log.info(f"[ENSEMBLE] {symbol} score={ensemble['final_score']:.3f} "
+                 f"action={ensemble['action']} conviction={ensemble['conviction']:.2f} "
+                 f"regime={regime_label}")
         await self.state.set(f"ensemble:{symbol}", ensemble)
 
 # ── ORCHESTRATOR ──────────────────────────────────────────────────────────

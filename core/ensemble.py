@@ -74,7 +74,7 @@ REGIME_WEIGHTS = {
 }
 
 # Thresholds
-SCORE_THRESHOLD_TRADE  = 0.25   # |score| > 0.25 → open trade
+SCORE_THRESHOLD_TRADE  = 0.10   # |score| > 0.10 → open trade (TEMP: lowered from 0.25 for pipeline diagnosis)
 SCORE_THRESHOLD_STRONG = 0.55   # |score| > 0.55 → full-size trade
 AGREEMENT_BONUS        = 0.20   # bonus when ≥70% of signals agree
 AGREEMENT_RATIO_MIN    = 0.70

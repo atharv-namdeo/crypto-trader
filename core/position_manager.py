@@ -47,10 +47,14 @@ class PositionManager:
         if not price or not atr:
             return
 
+        log.info(f"[POSITION_CHECK] {symbol} score={score:.3f} "
+                 f"threshold=0.10 "
+                 f"position_exists={pos is not None}")
+
         # 3. Handle NO OPEN POSITION logic
         if not pos:
-            # Task 3: If no open position and abs(score) > 0.25 → call _open_position
-            if abs(score) > 0.25:
+            # If no open position and abs(score) > 0.10 → call _open_position (TEMP: lowered from 0.25)
+            if abs(score) > 0.10:
                 side = 'LONG' if score > 0 else 'SHORT'
                 await self._open_position(symbol, side, price, atr)
             return
