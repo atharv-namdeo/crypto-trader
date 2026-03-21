@@ -19,12 +19,12 @@ class OrderEngine:
         self.state = state
         self.running = False
         
-        self.dry_run = os.getenv('DRY_RUN', 'true').lower() == 'true'
+        self.dry_run = False  # Forced to False to always trade on Binance Testnet
         self.use_testnet = True  # Forced to bypass geo-blocking        
         # Determine prefix for API keys
         prefix = 'BINANCE_TEST_' if self.use_testnet else 'BINANCE_'
-        if not self.use_testnet and not os.getenv('BINANCE_API_KEY'):
-            prefix = 'BINANCE_REAL_'
+        
+        # We disabled real mode completely according to user request, forcing testnet key prefixes
             
         self.api_key = os.getenv(f'{prefix}API_KEY', '')
         self.api_secret = os.getenv(f'{prefix}API_SECRET', '')

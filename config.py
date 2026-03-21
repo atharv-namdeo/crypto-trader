@@ -4,8 +4,8 @@ import ccxt
 
 load_dotenv()
 
-# Trading Mode
-DRY_RUN = os.getenv('DRY_RUN', 'true').lower() == 'true'
+# Trading Mode - Forced to false since we use Binance Demo natively
+DRY_RUN = False
 CAPITAL = float(os.getenv('CAPITAL', '1000'))
 INR_RATE = 84.5 # Fixed conversion rate for display
 
