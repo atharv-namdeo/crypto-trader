@@ -45,7 +45,14 @@ class FeatureEngine:
         df_1h = await self.state.get_df(f"ohlcv:1h:{symbol}", n=200)
         df_1m = await self.state.get_df(f"ohlcv:1m:{symbol}", n=200)
         ob    = await self.state.get(f"orderbook:{symbol}")
-        tape  = await self.state.get(f"tape:{symbol}") 
+        
+        try:
+            import json
+            raw_tape = await self.state.redis.lrange(f"tape:{symbol}", 0, -1)
+            tape = [json.loads(t) for t in raw_tape] if raw_tape else []
+        except Exception:
+            tape = []
+            
         live_k= await self.state.get(f"live_kline:1m:{symbol}")
         
         # If we lack basic historical data, skip

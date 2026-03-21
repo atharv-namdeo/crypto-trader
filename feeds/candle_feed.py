@@ -10,8 +10,8 @@ the historical 1m, 5m, 15m, 1h, and 4h DataFrames and pushes to Redis.
 import asyncio
 import logging
 import pandas as pd
+import aiohttp
 from core.state_manager import StateManager
-from config import get_exchange
 
 log = logging.getLogger("CandleFeed")
 
@@ -20,7 +20,6 @@ class CandleFeedManager:
         self.symbols = symbols
         self.timeframes = timeframes  # e.g. ["1m", "5m", "15m", "1h", "4h"]
         self.state = state
-        self.exchange = get_exchange()
         self.running = False
 
     async def run_forever(self):
@@ -61,18 +60,26 @@ class CandleFeedManager:
             await self._update_symbol_timeframes(symbol, limit=500)
             
     async def _update_symbol_timeframes(self, symbol: str, limit: int = 100):
-        """Fetch all required timeframes via ccxt and store in Redis."""
-        # Note: In a true ultra-low latency system, you'd aggregate the 1m bars 
-        # in memory. CCXT fetch overhead is ~200ms which is fine for 1m strategies.
+        import aiohttp
         for tf in self.timeframes:
             try:
-                # CCXT is synchronous, so we run it in thread pool to not block asyncio loop
-                loop = asyncio.get_event_loop()
-                raw = await loop.run_in_executor(
-                    None, 
-                    lambda: self.exchange.fetch_ohlcv(symbol, tf, limit=limit)
-                )
-                df = pd.DataFrame(raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                market_sym = symbol.replace('/', '').upper()
+                url = f"https://testnet.binancefuture.com/fapi/v1/klines?symbol={market_sym}&interval={tf}&limit={limit}"
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as response:
+                        raw = await response.json()
+                
+                data = []
+                for k in raw:
+                    data.append({
+                        'timestamp': k[0],
+                        'open': float(k[1]),
+                        'high': float(k[2]),
+                        'low': float(k[3]),
+                        'close': float(k[4]),
+                        'volume': float(k[5])
+                    })
+                df = pd.DataFrame(data)
                 
                 # Store in Redis
                 await self.state.set_df(f"ohlcv:{tf}:{symbol}", df)

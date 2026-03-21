@@ -7,6 +7,5 @@ __pycache__/
 node_modules/
 dist/
 .firebase/
-ml/model.pkl
 .gemini/
 dashboard/node_modules/

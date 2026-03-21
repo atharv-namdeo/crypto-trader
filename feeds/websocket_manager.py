@@ -48,6 +48,13 @@ class WebSocketManager:
         url = self._get_stream_url()
         log.info(f"🔗 Starting WebSocket connection to {url}")
         
+        # Flush bad tape keys on startup
+        for sym in ["BTC/USDT", "ETH/USDT", "BTCUSDT", "ETHUSDT"]:
+            try:
+                await self.state.redis.delete(f"tape:{sym}")
+            except Exception:
+                pass
+        
         while self.running:
             try:
                 async with websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
