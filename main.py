@@ -122,6 +122,11 @@ class TradingEngine:
         await self.state.set(f"regime:{symbol}", regime_data)
 
         signal_map = {}
+        _keys_logged = getattr(self, '_keys_logged', False)
+        if not _keys_logged:
+            log.info(f"[FEATURE KEYS] {list(f.keys())}")
+            self._keys_logged = True
+
         for name, strategy in ALL_STRATEGIES.items():
             try:
                 if hasattr(strategy, 'calculate_signal_from_features'):
@@ -130,11 +135,17 @@ class TradingEngine:
                     sig = strategy.calculate_signal(df_1h, macro_trend="BULLISH", portfolio_value=CAPITAL)
                 
                 if sig:
+                    direction = sig.get('direction', 'NONE')
                     if 'confidence' not in sig:
                         sig['confidence'] = 0.5
                     signal_map[name] = sig
-            except Exception:
-                pass
+                    log.info(f"  [STRATEGY] {name} → {direction} "
+                             f"conf={sig.get('confidence', 0):.2f} "
+                             f"reason={sig.get('reason', 'N/A')}")
+                else:
+                    log.info(f"  [STRATEGY] {name} → returned None/empty")
+            except Exception as e:
+                log.warning(f"  [STRATEGY] {name} → ERROR: {e}")
 
         ensemble = compute_ensemble(signal_map, regime_label, regime_conf)
 
