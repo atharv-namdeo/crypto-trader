@@ -1,17 +1,14 @@
 """
 core/ensemble.py
-Weighted Ensemble Scorer — Phase 1
+Majority-Vote Ensemble Scorer — Phase 2
 
-Combines all 20 strategy signals (each returning direction + confidence)
-into a single final_score ∈ [-1.0, +1.0].
-
-final_score > +0.25  → LONG  (size scales with conviction)
-final_score < -0.25  → SHORT
-else                 → NEUTRAL (no trade or hold)
+Combines all strategy signals into a forced BUY / SELL / NEUTRAL decision
+every cycle. No threshold gating — majority vote with 40% quorum.
 """
 
-import numpy as np
+import logging
 
+log = logging.getLogger("Ensemble")
 
 # ── Base weights (sum to 1.0 after normalization) ─────────────────────────
 BASE_WEIGHTS = {
@@ -73,22 +70,6 @@ REGIME_WEIGHTS = {
     },
 }
 
-# Thresholds
-SCORE_THRESHOLD_TRADE  = 0.10   # |score| > 0.10 → open trade (TEMP: lowered from 0.25 for pipeline diagnosis)
-SCORE_THRESHOLD_STRONG = 0.55   # |score| > 0.55 → full-size trade
-AGREEMENT_BONUS        = 0.20   # bonus when ≥70% of signals agree
-AGREEMENT_RATIO_MIN    = 0.70
-
-
-def _normalize_weights(weights: dict, signal_names: list) -> dict:
-    """Keep only keys present in signal_names, renormalize to sum=1."""
-    w = {k: weights.get(k, 0.0) for k in signal_names}
-    total = sum(w.values())
-    if total == 0:
-        n = len(signal_names)
-        return {k: 1.0 / n for k in signal_names}
-    return {k: v / total for k, v in w.items()}
-
 
 def signal_to_score(signal: dict) -> float:
     """
@@ -101,7 +82,7 @@ def signal_to_score(signal: dict) -> float:
     """
     direction = signal.get('direction', 'NONE')
     confidence = float(signal.get('confidence', signal.get('score', 0.5)))
-    confidence = np.clip(confidence, 0.0, 1.0)
+    confidence = max(0.0, min(1.0, confidence))
 
     if direction == 'LONG':
         return confidence
@@ -117,7 +98,10 @@ def compute_ensemble(
     regime_confidence: float = 0.5,
 ) -> dict:
     """
-    Combine all strategy signals into one ensemble result.
+    Majority-vote ensemble: forced BUY / SELL / NEUTRAL decision.
+
+    Instead of threshold-gating, counts directional votes.
+    40% quorum required for BUY or SELL; otherwise NEUTRAL.
 
     Args:
         signal_map: dict mapping strategy name → signal dict
@@ -126,66 +110,53 @@ def compute_ensemble(
 
     Returns:
         {
-          'final_score': float,   # ∈ [-1, +1]
-          'action': str,          # 'LONG' | 'SHORT' | 'NEUTRAL'
-          'conviction': float,    # 0–1, position size multiplier
-          'signal_scores': dict,  # individual scores for logging
-          'agreement_ratio': float,
+          'action': str,          # 'BUY' | 'SELL' | 'NEUTRAL'
+          'score': float,         # average raw score
+          'conviction': float,    # 0–1 ratio of votes in winning direction
+          'long_votes': int,
+          'short_votes': int,
+          'regime': str,
+          'signal_scores': dict,
         }
     """
     if not signal_map:
-        return {'final_score': 0.0, 'action': 'NEUTRAL', 'conviction': 0.0,
-                'signal_scores': {}, 'agreement_ratio': 0.0}
+        return {
+            'action': 'NEUTRAL', 'score': 0.0, 'conviction': 0.0,
+            'long_votes': 0, 'short_votes': 0, 'regime': regime,
+            'signal_scores': {},
+        }
 
     # Convert each strategy signal → numeric score
     signal_scores = {name: signal_to_score(sig)
                      for name, sig in signal_map.items()}
 
-    # Build regime-adjusted weights
-    weights = dict(BASE_WEIGHTS)
-    if regime in REGIME_WEIGHTS:
-        weights.update(REGIME_WEIGHTS[regime])
+    total_signals = len(signal_scores)
 
-    # Normalize to present signals only
-    norm_weights = _normalize_weights(weights, list(signal_scores.keys()))
+    # Count directional votes
+    long_votes = sum(1 for v in signal_scores.values() if v > 0.1)
+    short_votes = sum(1 for v in signal_scores.values() if v < -0.1)
+    neutral = total_signals - long_votes - short_votes
 
-    # Weighted sum
-    raw_score = sum(signal_scores[k] * norm_weights[k]
-                    for k in signal_scores)
+    # Weighted average score
+    raw_score = sum(signal_scores.values()) / total_signals
 
-    # Agreement bonus: ≥70% signals pointing same direction
-    bullish = sum(1 for v in signal_scores.values() if v > 0.1)
-    bearish = sum(1 for v in signal_scores.values() if v < -0.1)
-    total   = len(signal_scores)
-    agreement_ratio = max(bullish, bearish) / (total + 1e-9)
-
-    if agreement_ratio >= AGREEMENT_RATIO_MIN:
-        # Apply bonus in direction of majority
-        direction_sign = 1 if bullish > bearish else -1
-        raw_score += direction_sign * AGREEMENT_BONUS
-
-    # Scale by regime confidence (low confidence → dampen signal)
-    confidence_scale = 0.5 + 0.5 * regime_confidence
-    final_score = float(np.clip(raw_score * confidence_scale, -1.0, 1.0))
-
-    # Determine action and conviction (0→1 position size multiplier)
-    if final_score > SCORE_THRESHOLD_TRADE:
-        action = 'LONG'
-        conviction = min((final_score - SCORE_THRESHOLD_TRADE) /
-                         (SCORE_THRESHOLD_STRONG - SCORE_THRESHOLD_TRADE), 1.0)
-    elif final_score < -SCORE_THRESHOLD_TRADE:
-        action = 'SHORT'
-        conviction = min((abs(final_score) - SCORE_THRESHOLD_TRADE) /
-                         (SCORE_THRESHOLD_STRONG - SCORE_THRESHOLD_TRADE), 1.0)
+    # ── FORCED DECISION — always pick one ──
+    if long_votes > short_votes and long_votes > total_signals * 0.4:
+        action = "BUY"
+        conviction = long_votes / total_signals
+    elif short_votes > long_votes and short_votes > total_signals * 0.4:
+        action = "SELL"
+        conviction = short_votes / total_signals
     else:
-        action = 'NEUTRAL'
+        action = "NEUTRAL"
         conviction = 0.0
 
     return {
-        'final_score':    final_score,
         'action':         action,
+        'score':          float(raw_score),
         'conviction':     float(conviction),
-        'signal_scores':  signal_scores,
-        'agreement_ratio': float(agreement_ratio),
+        'long_votes':     long_votes,
+        'short_votes':    short_votes,
         'regime':         regime,
+        'signal_scores':  signal_scores,
     }

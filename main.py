@@ -90,7 +90,7 @@ class TradingEngine:
         self.running = False
         self.regime = RegimeClassifier()
         
-    async def run_forever(self, interval_s: int = 1):
+    async def run_forever(self, interval_s: int = 60):
         """Main strategy loop: reads from Redis, computes signals, updates ensemble score."""
         self.running = True
         log.info("🧠 Brain Engine Loop Started")
@@ -137,9 +137,16 @@ class TradingEngine:
                 pass
 
         ensemble = compute_ensemble(signal_map, regime_label, regime_conf)
-        log.info(f"[ENSEMBLE] {symbol} score={ensemble['final_score']:.3f} "
-                 f"action={ensemble['action']} conviction={ensemble['conviction']:.2f} "
-                 f"regime={regime_label}")
+
+        # Task 5: Log every ensemble cycle with vote counts
+        action = ensemble['action']
+        long_votes = ensemble['long_votes']
+        short_votes = ensemble['short_votes']
+        neutral = len(signal_map) - long_votes - short_votes
+        log.info(f"[ENSEMBLE CYCLE] {symbol} → "
+                 f"BUY={long_votes} SELL={short_votes} "
+                 f"NEUTRAL={neutral} → {action}")
+
         await self.state.set(f"ensemble:{symbol}", ensemble)
 
 # ── ORCHESTRATOR ──────────────────────────────────────────────────────────
@@ -173,12 +180,12 @@ async def main():
     # 3. Create Coroutines
     tasks = [
         asyncio.create_task(risk_guardian.run_loop(interval=1)),
-        asyncio.create_task(position_manager.run_loop(interval=5)),
+        asyncio.create_task(position_manager.run_loop(interval=60)),
         asyncio.create_task(order_engine.run_loop(interval=1)),
         asyncio.create_task(ws_feed.run_forever()),
         asyncio.create_task(candle_feed.run_forever()),
         asyncio.create_task(features.run_forever(interval_s=1)),
-        asyncio.create_task(engine.run_forever(interval_s=1)),
+        asyncio.create_task(engine.run_forever(interval_s=60)),
         asyncio.create_task(start_api_server(state)),
     ]
 

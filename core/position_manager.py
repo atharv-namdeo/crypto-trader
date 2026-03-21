@@ -1,152 +1,184 @@
 """
 core/position_manager.py
-Async Position Manager — Phase 4
+Async Position Manager — Phase 2 (Forced Decision Mode)
+
+Acts on every BUY/SELL/NEUTRAL decision from the ensemble scorer
+every 60 seconds. The bot must always be in a position or just exited one.
 """
 
-import time
-import json
 import asyncio
 import logging
-from config import SYMBOLS, CAPITAL
+from config import SYMBOLS
 from core.state_manager import StateManager
 
 log = logging.getLogger("PositionManager")
 
+
 class PositionManager:
     def __init__(self, state: StateManager):
         self.state = state
-        self.running = False
-        
-    async def run_loop(self, interval: int = 5):
-        self.running = True
-        log.info("🚀 Position Manager Loop Started")
-        
-        while self.running:
-            try:
-                for symbol in SYMBOLS:
-                    await self._process_symbol(symbol)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                log.error(f"PositionManager loop error: {e}")
-                
+        self.log = log
+
+    async def run_loop(self, interval: int = 60):
+        self.log.info("🚀 Position Manager Loop Started (interval=60s)")
+
+        while True:
+            for symbol in SYMBOLS:
+                try:
+                    ensemble = await self.state.get(f"ensemble:{symbol}")
+                    if not ensemble:
+                        continue
+
+                    action = ensemble.get('action', 'NEUTRAL')
+                    conviction = ensemble.get('conviction', 0.0)
+                    price = await self.state.get_float(f"price:{symbol}")
+                    position = await self.state.get_position(symbol)
+
+                    self.log.info(
+                        f"[DECISION] {symbol} → {action} "
+                        f"conviction={conviction:.2f} "
+                        f"price={price}"
+                    )
+
+                    # ── Currently in NO position ──
+                    if not position or position.get('status') == 'CLOSED':
+                        if action == "BUY":
+                            await self._open_position(
+                                symbol, "LONG", conviction, price)
+                        elif action == "SELL":
+                            await self._open_position(
+                                symbol, "SHORT", conviction, price)
+                        # NEUTRAL = stay out, do nothing
+
+                    # ── Currently in a LONG position ──
+                    elif position.get('side') == 'LONG':
+                        if action == "SELL":
+                            await self._close_position(
+                                symbol, position, price, "SIGNAL_FLIP")
+                            await self._open_position(
+                                symbol, "SHORT", conviction, price)
+                        elif action == "NEUTRAL":
+                            await self._close_position(
+                                symbol, position, price, "NEUTRAL_EXIT")
+                        # BUY = hold current long
+
+                    # ── Currently in a SHORT position ──
+                    elif position.get('side') == 'SHORT':
+                        if action == "BUY":
+                            await self._close_position(
+                                symbol, position, price, "SIGNAL_FLIP")
+                            await self._open_position(
+                                symbol, "LONG", conviction, price)
+                        elif action == "NEUTRAL":
+                            await self._close_position(
+                                symbol, position, price, "NEUTRAL_EXIT")
+                        # SELL = hold current short
+
+                    # ── Update trailing stop on open positions ──
+                    if position and position.get('status') == 'OPEN':
+                        await self._update_trailing_stop(
+                            symbol, position, price)
+
+                except Exception as e:
+                    self.log.error(f"PositionManager error {symbol}: {e}")
+
             await asyncio.sleep(interval)
 
-    async def _process_symbol(self, symbol: str):
-        # 1. Check current open position in Redis
-        pos = await self.state.get_position(symbol)
-        
-        # 2. Check current ensemble score
-        ensemble = await self.state.get(f"ensemble:{symbol}")
-        score = ensemble.get('final_score', 0.0) if ensemble else 0.0
-        
-        price = await self.state.get_float(f"price:{symbol}")
-        f = await self.state.get(f"features:{symbol}")
-        atr = f.get('atr_14_1h', price * 0.01) if (f and price) else 0.0
-        
-        if not price or not atr:
-            return
+    async def _open_position(self, symbol: str, side: str,
+                             conviction: float, price: float):
+        """Open a paper trade position in Redis."""
+        atr = await self.state.get_float(f"atr:{symbol}") or price * 0.01
+        stop = price - 1.5 * atr if side == "LONG" else price + 1.5 * atr
+        tp1 = price + 3.0 * atr if side == "LONG" else price - 3.0 * atr
+        qty = 10.0 / price  # $10 per trade in paper mode
 
-        log.info(f"[POSITION_CHECK] {symbol} score={score:.3f} "
-                 f"threshold=0.10 "
-                 f"position_exists={pos is not None}")
+        position = {
+            "status": "OPEN",
+            "side": side,
+            "entry": price,
+            "qty": qty,
+            "stop": stop,
+            "tp1": tp1,
+            "open_time": asyncio.get_event_loop().time(),
+            "conviction": conviction,
+        }
+        await self.state.set_position(symbol, position)
 
-        # 3. Handle NO OPEN POSITION logic
-        if not pos:
-            # If no open position and abs(score) > 0.10 → call _open_position (TEMP: lowered from 0.25)
-            if abs(score) > 0.10:
-                side = 'LONG' if score > 0 else 'SHORT'
-                await self._open_position(symbol, side, price, atr)
-            return
-
-        # 4. We HAVE an open position.
-        # Check Flip Cooldown (Task 6)
-        last_flip = await self.state.get_float(f"last_flip_time:{symbol}")
-        can_flip = (time.time() - last_flip) >= 300
-
-        # Flip logic for LONG
-        if pos['side'] == 'LONG':
-            if score < -0.45 and can_flip:
-                log.info(f"🔄 FLIP {symbol} LONG to SHORT (Score: {score:.2f})")
-                await self._close_position(symbol, pos['qty'])
-                await self.state.set(f"last_flip_time:{symbol}", time.time())
-                await self._open_position(symbol, 'SHORT', price, atr)
-                return
-            
-        # Flip logic for SHORT
-        elif pos['side'] == 'SHORT':
-            if score > 0.45 and can_flip:
-                log.info(f"🔄 FLIP {symbol} SHORT to LONG (Score: {score:.2f})")
-                await self._close_position(symbol, pos['qty'])
-                await self.state.set(f"last_flip_time:{symbol}", time.time())
-                await self._open_position(symbol, 'LONG', price, atr)
-                return
-
-        # 5. Trailing Stops and Partial TPs
-        await self._update_trailing_stop(symbol, pos, price, atr)
-        await self._check_partial_tp(symbol, pos, price)
-
-    async def _open_position(self, symbol: str, side: str, price: float, atr: float):
-        """Publish order_request to Redis for the Order Engine."""
-        # Simple sizing: risk 1% of max portfolio
-        max_port = 500  # Will be controlled by risk guardian
-        qty = (max_port * 0.01) / atr  # rough position size based on volatility
-        
-        stop_dist = 1.5 * atr
-        stop = price - stop_dist if side == 'LONG' else price + stop_dist
-        tp   = price + stop_dist * 3.0 if side == 'LONG' else price - stop_dist * 3.0
-        
+        # Also publish order_request for order engine compatibility
         req = {
             'action': 'OPEN',
             'side': side,
             'qty': float(qty),
             'price': float(price),
             'stop': float(stop),
-            'tp': float(tp)
+            'tp': float(tp1),
         }
         await self.state.set(f"order_request:{symbol}", req)
-        log.info(f"📨 Published OPEN order_request for {symbol}: {req}")
 
-    async def _close_position(self, symbol: str, qty: float):
-        """Publish close request."""
-        pos = await self.state.get_position(symbol)
-        side = pos['side'] if pos else 'LONG'
+        self.log.info(
+            f"📝 PAPER TRADE OPEN: {side} {symbol} "
+            f"qty={qty:.6f} entry={price:.2f} "
+            f"stop={stop:.2f} tp1={tp1:.2f}"
+        )
+
+    async def _close_position(self, symbol: str, position: dict,
+                              price: float, reason: str):
+        """Close an open position and log the reason."""
+        side = position.get('side', 'LONG')
+        qty = position.get('qty', 0.0)
+        entry = position.get('entry', price)
+
+        # Calculate P&L
+        if side == 'LONG':
+            pnl = (price - entry) * qty
+        else:
+            pnl = (entry - price) * qty
+
+        # Mark position as closed
+        position['status'] = 'CLOSED'
+        position['exit_price'] = price
+        position['pnl'] = pnl
+        position['close_reason'] = reason
+        await self.state.set_position(symbol, position)
+
+        # Publish close request for order engine
         req = {
             'action': 'CLOSE',
             'side': side,
-            'qty': float(qty)
+            'qty': float(qty),
         }
         await self.state.set(f"order_request:{symbol}", req)
-        log.info(f"📨 Published CLOSE order_request for {symbol}")
 
-    async def _update_trailing_stop(self, symbol: str, pos: dict, price: float, atr: float):
+        self.log.info(
+            f"📝 PAPER TRADE CLOSE: {side} {symbol} "
+            f"entry={entry:.2f} exit={price:.2f} "
+            f"pnl={pnl:.4f} reason={reason}"
+        )
+
+    async def _update_trailing_stop(self, symbol: str, pos: dict,
+                                    price: float):
         """Update highest/lowest price and trail stop in Redis."""
+        atr = await self.state.get_float(f"atr:{symbol}") or price * 0.01
         trail_dist = 1.5 * atr
-        
+
         updated = False
-        highest = pos.get('highest_price', pos['entry'])
-        lowest = pos.get('lowest_price', pos['entry'])
-        
-        if pos['side'] == 'LONG':
+        highest = pos.get('highest_price', pos.get('entry', price))
+        lowest = pos.get('lowest_price', pos.get('entry', price))
+
+        if pos.get('side') == 'LONG':
             if price > highest:
                 pos['highest_price'] = price
                 new_stop = price - trail_dist
-                if new_stop > pos['stop']:
+                if new_stop > pos.get('stop', 0):
                     pos['stop'] = new_stop
                     updated = True
-        elif pos['side'] == 'SHORT':
+        elif pos.get('side') == 'SHORT':
             if price < lowest:
                 pos['lowest_price'] = price
                 new_stop = price + trail_dist
-                if new_stop < pos['stop']:
+                if new_stop < pos.get('stop', float('inf')):
                     pos['stop'] = new_stop
                     updated = True
-                    
+
         if updated:
             await self.state.set_position(symbol, pos)
-
-    async def _check_partial_tp(self, symbol: str, pos: dict, price: float):
-        """Placeholder for 50% scale out."""
-        # The true TP is handled by TAKE_PROFIT_MARKET on Binance
-        # This function could manage multi-tier TPs if required.
-        pass
