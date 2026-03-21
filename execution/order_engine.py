@@ -66,8 +66,9 @@ class OrderEngine:
         
         while self.running:
             try:
-                if not self.client:
-                    await self.init_client()
+                if not self.dry_run:
+                    if not self.client:
+                        await self.init_client()
                     
                 for symbol in SYMBOLS:
                     queue_key = f"order_request:{symbol}"
