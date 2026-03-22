@@ -127,33 +127,51 @@ class ScalperStrategy:
             log.info(f"🧠 [SCALPER FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} (thresh={threshold})")
             
             if action == 'BUY':
-                await self._open_position(symbol, 'LONG', price)
+                await self._open_position(symbol, 'LONG', price, conviction)
             elif action == 'SELL':
-                await self._open_position(symbol, 'SHORT', price)
+                await self._open_position(symbol, 'SHORT', price, conviction)
 
-    async def _open_position(self, symbol: str, side: str, price: float):
+    async def _open_position(self, symbol: str, side: str, price: float, conviction: float):
         qty = (self.capital * 0.5) / price
         pos = {
             'side': side,
             'entry': price,
             'qty': qty,
-            'time': time.time()
+            'time': time.time(),
+            'strategy': 'SCALPER'
         }
         await self.state.set(f"scalper:pos:{symbol}", pos)
         
         # Send physical order request to Binance 
-        req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': 0, 'tp': 0}
+        req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': 0, 'tp': 0, 'strategy': 'SCALPER'}
         await self.state.set(f"order_request:{symbol}", req)
+        
+        # Telegram notification
+        from core.telegram_notifier import TelegramNotifier
+        await TelegramNotifier().trade_opened('SCALPER', symbol, side, price, qty, 0, 0, conviction)
         
         log.info(f"⚡ [SCALPER] OPEN {side} {symbol} at {price:.2f}")
 
     async def _close_position(self, symbol: str, pos: dict, price: float, reason: str):
-        # Calculate PNL and log
-        await self.pnl.record_trade('SCALPER', symbol, pos['side'], pos['entry'], price, pos['qty'], reason)
+        # Calculate PNL
+        entry = pos['entry']
+        side = pos['side']
+        qty = pos['qty']
+        pnl_usd = (price - entry) * qty if side == 'LONG' else (entry - price) * qty
         
+        await self.pnl.record_trade('SCALPER', symbol, side, entry, price, qty, reason)
+        
+        # Calculate duration
+        duration_seconds = time.time() - pos.get('time', time.time())
+        duration_str = f"{int(duration_seconds/60)}m" if duration_seconds < 3600 else f"{duration_seconds/3600:.1f}h"
+
+        # Telegram notification
+        from core.telegram_notifier import TelegramNotifier
+        await TelegramNotifier().trade_closed('SCALPER', symbol, side, entry, price, qty, pnl_usd, reason, duration_str)
+
         # Clear local state
         await self.state.redis.delete(f"scalper:pos:{symbol}")
         
         # Send physical close to Binance
-        req = {'action': 'CLOSE', 'side': pos['side'], 'qty': pos['qty']}
+        req = {'action': 'CLOSE', 'side': pos['side'], 'qty': pos['qty'], 'strategy': 'SCALPER'}
         await self.state.set(f"order_request:{symbol}", req)

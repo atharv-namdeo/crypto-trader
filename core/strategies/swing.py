@@ -139,11 +139,11 @@ class SwingStrategy:
             log.info(f"🧠 [SWING FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} (thresh={threshold})")
             
             if action == 'BUY' and trend_up:
-                await self._open_position(symbol, 'LONG', price, atr_1h)
+                await self._open_position(symbol, 'LONG', price, atr_1h, conviction)
             elif action == 'SELL' and not trend_up:
-                await self._open_position(symbol, 'SHORT', price, atr_1h)
+                await self._open_position(symbol, 'SHORT', price, atr_1h, conviction)
 
-    async def _open_position(self, symbol: str, side: str, price: float, atr: float):
+    async def _open_position(self, symbol: str, side: str, price: float, atr: float, conviction: float):
         qty = (self.capital * 0.4) / price
         stop = price - 2.0 * atr if side == 'LONG' else price + 2.0 * atr
         tp = price + 4.0 * atr if side == 'LONG' else price - 4.0 * atr
@@ -154,17 +154,38 @@ class SwingStrategy:
             'qty': qty,
             'stop': stop,
             'tp': tp,
-            'time': time.time()
+            'time': time.time(),
+            'strategy': 'SWING'
         }
         await self.state.set(f"swing:pos:{symbol}", pos)
         
-        req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': stop, 'tp': tp}
+        req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': stop, 'tp': tp, 'strategy': 'SWING'}
         await self.state.set(f"order_request:{symbol}", req)
+
+        # Telegram notification
+        from core.telegram_notifier import TelegramNotifier
+        await TelegramNotifier().trade_opened('SWING', symbol, side, price, qty, stop, tp, conviction)
+
         log.info(f"🌊 [SWING] OPEN {side} {symbol} at {price:.2f}")
 
     async def _close_position(self, symbol: str, pos: dict, price: float, reason: str):
-        await self.pnl.record_trade('SWING', symbol, pos['side'], pos['entry'], price, pos['qty'], reason)
+        # Calculate PNL
+        entry = pos['entry']
+        side = pos['side']
+        qty = pos['qty']
+        pnl_usd = (price - entry) * qty if side == 'LONG' else (entry - price) * qty
+
+        await self.pnl.record_trade('SWING', symbol, side, entry, price, qty, reason)
+        
+        # Calculate duration
+        duration_seconds = time.time() - pos.get('time', time.time())
+        duration_str = f"{int(duration_seconds/3600)}h" if duration_seconds > 3600 else f"{int(duration_seconds/60)}m"
+
+        # Telegram notification
+        from core.telegram_notifier import TelegramNotifier
+        await TelegramNotifier().trade_closed('SWING', symbol, side, entry, price, qty, pnl_usd, reason, duration_str)
+
         await self.state.redis.delete(f"swing:pos:{symbol}")
         
-        req = {'action': 'CLOSE', 'side': pos['side'], 'qty': pos['qty']}
+        req = {'action': 'CLOSE', 'side': pos['side'], 'qty': pos['qty'], 'strategy': 'SWING'}
         await self.state.set(f"order_request:{symbol}", req)

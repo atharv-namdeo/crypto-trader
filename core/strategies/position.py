@@ -174,11 +174,11 @@ class PositionStrategy:
             log.info(f"🧠 [POSITION FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} (thresh={threshold})")
             
             if action == 'BUY' and structure == 'BULL':
-                await self._open_position(symbol, 'LONG', price, atr_4h)
+                await self._open_position(symbol, 'LONG', price, atr_4h, conviction)
             elif action == 'SELL' and structure == 'BEAR':
-                await self._open_position(symbol, 'SHORT', price, atr_4h)
+                await self._open_position(symbol, 'SHORT', price, atr_4h, conviction)
 
-    async def _open_position(self, symbol: str, side: str, price: float, atr: float):
+    async def _open_position(self, symbol: str, side: str, price: float, atr: float, conviction: float):
         qty = (self.capital * 0.6) / price
         stop = price - 2.5 * atr if side == 'LONG' else price + 2.5 * atr
         tp1 = price + 3.0 * atr if side == 'LONG' else price - 3.0 * atr
@@ -194,23 +194,55 @@ class PositionStrategy:
             'tp2': tp2,
             'time': time.time(),
             'highest': price,
-            'lowest': price
+            'lowest': price,
+            'strategy': 'POSITION'
         }
         await self.state.set(f"position:pos:{symbol}", pos)
         
-        req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': stop, 'tp': tp2}
+        req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': stop, 'tp': tp2, 'strategy': 'POSITION'}
         await self.state.set(f"order_request:{symbol}", req)
+
+        # Telegram notification
+        from core.telegram_notifier import TelegramNotifier
+        await TelegramNotifier().trade_opened('POSITION', symbol, side, price, qty, stop, tp2, conviction)
+
         log.info(f"🏔️ [POSITION] OPEN {side} {symbol} at {price:.2f}")
 
     async def _close_partial(self, symbol: str, pos: dict, price: float, qty: float, reason: str):
-        await self.pnl.record_trade('POSITION', symbol, pos['side'], pos['entry'], price, qty, reason)
-        # Send physical close for partial size to Binance
-        req = {'action': 'CLOSE', 'side': pos['side'], 'qty': qty}
+        entry = pos['entry']
+        side = pos['side']
+        pnl_usd = (price - entry) * qty if side == 'LONG' else (entry - price) * qty
+
+        await self.pnl.record_trade('POSITION', symbol, side, entry, price, qty, reason)
+        
+        # Duration
+        duration_seconds = time.time() - pos.get('time', time.time())
+        duration_str = f"{int(duration_seconds/3600)}h" if duration_seconds > 3600 else f"{int(duration_seconds/60)}m"
+
+        # Telegram notification
+        from core.telegram_notifier import TelegramNotifier
+        await TelegramNotifier().trade_closed('POSITION', symbol, side, entry, price, qty, pnl_usd, f"PARTIAL_{reason}", duration_str)
+
+        req = {'action': 'CLOSE', 'side': side, 'qty': qty, 'strategy': 'POSITION'}
         await self.state.set(f"order_request:{symbol}", req)
 
     async def _close_position(self, symbol: str, pos: dict, price: float, reason: str):
-        await self.pnl.record_trade('POSITION', symbol, pos['side'], pos['entry'], price, pos['qty'], reason)
+        entry = pos['entry']
+        side = pos['side']
+        qty = pos['qty']
+        pnl_usd = (price - entry) * qty if side == 'LONG' else (entry - price) * qty
+
+        await self.pnl.record_trade('POSITION', symbol, side, entry, price, qty, reason)
+        
+        # Duration
+        duration_seconds = time.time() - pos.get('time', time.time())
+        duration_str = f"{int(duration_seconds/3600)}h" if duration_seconds > 3600 else f"{int(duration_seconds/60)}m"
+
+        # Telegram notification
+        from core.telegram_notifier import TelegramNotifier
+        await TelegramNotifier().trade_closed('POSITION', symbol, side, entry, price, qty, pnl_usd, reason, duration_str)
+
         await self.state.redis.delete(f"position:pos:{symbol}")
         
-        req = {'action': 'CLOSE', 'side': pos['side'], 'qty': pos['qty']}
+        req = {'action': 'CLOSE', 'side': side, 'qty': qty, 'strategy': 'POSITION'}
         await self.state.set(f"order_request:{symbol}", req)
