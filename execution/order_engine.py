@@ -19,15 +19,11 @@ class OrderEngine:
         self.state = state
         self.running = False
         
-        self.dry_run = False  # Forced to False to always trade on Binance Testnet
-        self.use_testnet = True  # Forced to bypass geo-blocking        
-        # Determine prefix for API keys
-        prefix = 'BINANCE_TEST_' if self.use_testnet else 'BINANCE_'
+        self.dry_run = os.getenv('DRY_RUN', 'false').lower() == 'true'
+        self.use_testnet = os.getenv('BINANCE_TESTNET', 'true').lower() == 'true'
         
-        # We disabled real mode completely according to user request, forcing testnet key prefixes
-            
-        self.api_key = os.getenv(f'{prefix}API_KEY', '')
-        self.api_secret = os.getenv(f'{prefix}API_SECRET', '')
+        self.api_key = os.getenv('BINANCE_TEST_API_KEY')
+        self.api_secret = os.getenv('BINANCE_TEST_API_SECRET')
         self.client: AsyncClient = None
 
     async def init_client(self):
@@ -35,25 +31,21 @@ class OrderEngine:
         self.client = await AsyncClient.create(
             api_key=self.api_key,
             api_secret=self.api_secret,
-            testnet=self.use_testnet
+            testnet=True
         )
+        # testnet=True natively configures python-binance to use testnet.binancefuture.com and wss://stream.binancefuture.com
         
-        # Task 7 Requirements: Set ISOLATED margin and 3x Leverage
         if not self.dry_run:
             for symbol in SYMBOLS:
-                market_sym = symbol.replace('/', '').upper()  # e.g. BTCUSDT
+                market_sym = symbol.replace('/', '').upper() 
                 try:
                     await self.client.futures_change_margin_type(symbol=market_sym, marginType='ISOLATED')
-                    log.info(f"✅ Set {market_sym} margin type to ISOLATED")
-                except BinanceAPIException as e:
-                    if 'No need to change margin type' not in e.message:
-                        log.warning(f"Could not set margin type for {market_sym}: {e.message}")
-                        
+                except BinanceAPIException:
+                    pass
                 try:
                     await self.client.futures_change_leverage(symbol=market_sym, leverage=3)
-                    log.info(f"✅ Set {market_sym} leverage to 3x")
-                except BinanceAPIException as e:
-                    log.error(f"Could not set leverage for {market_sym}: {e.message}")
+                except BinanceAPIException:
+                    pass
 
     async def close_client(self):
         if self.client:
@@ -71,7 +63,6 @@ class OrderEngine:
                     if not self.client:
                         await self.init_client()
                     
-                    # Fetch real account data every 60 cycles
                     if loops % 60 == 0:
                         try:
                             acc = await self.client.futures_account()
@@ -83,84 +74,53 @@ class OrderEngine:
                     queue_key = f"order_request:{symbol}"
                     req = await self.state.get(queue_key)
                     if req:
-                        await self._process_order(symbol, req)
-                        # Delete request after processing so it doesn't trigger again
-                        await self.state.redis.delete(queue_key)
+                        success = await self._process_order(symbol, req)
+                        if success:
+                            await self.state.redis.delete(queue_key)
+                        else:
+                            # Do not crash, retry in 10s
+                            await asyncio.sleep(10)
                         
                 loops += 1
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                log.error(f"OrderEngine error: {e}, retrying in 30s")
+                log.error(f"[TESTNET ERROR] OrderEngine loop error: {e}, retrying in 30s")
                 self.client = None
                 await asyncio.sleep(30)
                 
             await asyncio.sleep(interval)
 
     async def _process_order(self, symbol: str, req: dict):
-        """
-        Process order_request:
-        {
-            'action': 'OPEN' | 'CLOSE',
-            'side': 'LONG' | 'SHORT',
-            'qty': 0.005,
-            'price': 69000,
-            'stop': 68500,
-            'tp': 70000
-        }
-        """
         market_sym = symbol.replace('/', '').upper()
         action = req.get('action')
         side = req.get('side')
         qty = round(req.get('qty', 0), 5)
-        
-        log.info(f"📡 Processing Order Request: {action} {side} {qty} {market_sym}")
+        price = req.get('price', 0)
 
         if self.dry_run:
             log.info(f"📝 PAPER TRADE: {side} {market_sym} qty={qty}")
-            # Mock success by setting position state in Redis
-            if action == 'OPEN':
-                pos = {
-                    'status': 'OPEN',
-                    'symbol': symbol, 'side': side, 'entry': req.get('price'),
-                    'qty': qty, 'stop': req.get('stop'), 'tp1': req.get('tp')
-                }
-                await self.state.set_position(symbol, pos)
-            elif action == 'CLOSE':
-                await self.state.redis.delete(f"position:{symbol}")
-            return
+            return True
 
         try:
             if action == 'OPEN':
-                await self._execute_open(market_sym, side, qty, req.get('stop'), req.get('tp'))
-                # If everything succeeded, write to Redis position state
-                # Note: position sync is now also managed by PositionTracker logic,
-                # but we can set the active status here representing actual exchange state.
-                pos = {
-                    'symbol': symbol, 'side': side, 'entry': req.get('price'),
-                    'qty': qty, 'stop': req.get('stop'), 'tp': req.get('tp'),
-                    'live': True
-                }
-                await self.state.set_position(symbol, pos)
-                
+                await self._execute_open(market_sym, side, qty, price, req.get('stop'), req.get('tp'))
             elif action == 'CLOSE':
                 await self._execute_close(market_sym, side, qty)
-                await self.state.redis.delete(f"position:{symbol}")
-                
+            return True
+            
         except BinanceAPIException as e:
-            log.error(f"❌ Binance API Error on {action} {market_sym}: {e.message}")
+            log.error(f"[TESTNET ERROR] {e.message} — retrying in 10s")
+            return False
         except Exception as e:
-            log.error(f"❌ Order execution failed: {e}")
+            log.error(f"[TESTNET ERROR] {e} — retrying in 10s")
+            return False
 
-    async def _execute_open(self, symbol: str, side: str, qty: float, stop: float, tp: float):
-        """Place Market entry + SL + TP on Binance Futures."""
-        
-        # 1. Main Market Order
+    async def _execute_open(self, symbol: str, side: str, qty: float, price: float, stop: float, tp: float):
         main_side = 'BUY' if side == 'LONG' else 'SELL'
-        log.info(f"➜ Submitting {main_side} MARKET for {qty} {symbol}")
-        
-        # To handle floating point issues on Binance
         qty_str = f"{qty:.3f}" if 'BTC' in symbol else f"{qty:.2f}"
+        
+        log.info(f"[TESTNET ORDER] OPEN {side} {symbol} qty={qty_str} @ {price}")
         
         main_order = await self.client.futures_create_order(
             symbol=symbol,
@@ -168,15 +128,12 @@ class OrderEngine:
             type='MARKET',
             quantity=qty_str
         )
-        log.info(f"✅ Market Order Filled: {main_order['orderId']}")
+        log.info(f"[TESTNET FILLED] order_id={main_order['orderId']}")
 
-        # Opposing side for exit orders
         exit_side = 'SELL' if side == 'LONG' else 'BUY'
 
-        # 2. Stop Loss (STOP_MARKET)
         if stop and stop > 0:
             stop_price = round(stop, 1)
-            log.info(f"➜ Submitting STOP_MARKET for {symbol} at {stop_price}")
             await self.client.futures_create_order(
                 symbol=symbol,
                 side=exit_side,
@@ -186,10 +143,8 @@ class OrderEngine:
                 timeInForce='GTC'
             )
             
-        # 3. Take Profit (TAKE_PROFIT_MARKET)
         if tp and tp > 0:
             tp_price = round(tp, 1)
-            log.info(f"➜ Submitting TAKE_PROFIT_MARKET for {symbol} at {tp_price}")
             await self.client.futures_create_order(
                 symbol=symbol,
                 side=exit_side,
@@ -200,20 +155,18 @@ class OrderEngine:
             )
             
     async def _execute_close(self, symbol: str, side: str, qty: float):
-        """Close existing position and cancel pending SL/TP."""
         exit_side = 'SELL' if side == 'LONG' else 'BUY'
         qty_str = f"{qty:.3f}" if 'BTC' in symbol else f"{qty:.2f}"
         
-        # 1. Close position via MARKET
-        log.info(f"➜ Closing {side} position via {exit_side} MARKET {qty} {symbol}")
-        await self.client.futures_create_order(
+        log.info(f"[TESTNET ORDER] CLOSE {side} {symbol} qty={qty_str}")
+        
+        close_order = await self.client.futures_create_order(
             symbol=symbol,
             side=exit_side,
             type='MARKET',
             quantity=qty_str,
             reduceOnly='true'
         )
+        log.info(f"[TESTNET FILLED] order_id={close_order['orderId']}")
         
-        # 2. Cancel all open orders (SL/TP) for this symbol
         await self.client.futures_cancel_all_open_orders(symbol=symbol)
-        log.info(f"✅ Position closed and standing orders cancelled for {symbol}")
