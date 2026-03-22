@@ -28,6 +28,12 @@ class ScalperStrategy:
         log.info(f"⚡ Start SCALPER Loop (Cap: ${self.capital})")
         while self.running:
             try:
+                # Check if enabled in dashboard
+                enabled = await self.state.get("settings:scalper_enabled")
+                if enabled == "false":
+                    await asyncio.sleep(30)
+                    continue
+
                 for symbol in self.symbols:
                     await self._process(symbol)
             except asyncio.CancelledError:
@@ -103,9 +109,22 @@ class ScalperStrategy:
             
             long_score  = fuzzy.compute_long_score(indicators)
             short_score = fuzzy.compute_short_score(indicators)
-            action, conviction = fuzzy.should_trade(long_score, short_score, 'SCALPER')
             
-            log.info(f"🧠 [SCALPER FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} conviction={conviction:.3f}")
+            # Fetch live threshold from Redis
+            threshold = await self.state.get_float("settings:scalper_threshold") or 0.45
+            action, conviction = fuzzy.should_trade(long_score, short_score, 'SCALPER', threshold=threshold)
+            
+            # Store fuzzy scores for dashboard radar chart
+            await self.state.set(f"fuzzy_scores:{symbol}", {
+                "rsi": indicators['rsi'],
+                "vwap": (df_1m['close'].iloc[-1] - indicators['vwap']) / indicators['vwap'] * 100,
+                "vol": indicators['vol_ratio'],
+                "adx": indicators['adx'],
+                "long": long_score,
+                "short": short_score
+            })
+            
+            log.info(f"🧠 [SCALPER FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} (thresh={threshold})")
             
             if action == 'BUY':
                 await self._open_position(symbol, 'LONG', price)

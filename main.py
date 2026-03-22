@@ -1,21 +1,9 @@
-"""
-main.py — Quant Engine v6.0 (Phase 3: Multi-Strategy Parallel Architecture)
-
-Starts up:
-1. StateManager (Redis Interface)
-2. WebSocketFeed (Binance WS streams)
-3. CandleFeed (OHLCV multi-timeframe aggregation)
-4. FeatureEngine (60+ features computed every 1s)
-5. FastAPI Dashboard API
-6. PnLTracker & 3 Independent Strategies (Scalper, Swing, Position)
-7. OrderEngine (Execution)
-8. RiskGuardian (Safety limits)
-"""
-
 import asyncio
 import logging
 import signal
+import json
 import uvicorn
+from datetime import datetime
 from contextlib import suppress
 
 from config import SYMBOLS, CAPITAL
@@ -34,6 +22,28 @@ from core.strategies.swing import SwingStrategy
 from core.strategies.position import PositionStrategy
 
 log = logging.getLogger("MAIN")
+
+class RedisLogHandler(logging.Handler):
+    def __init__(self, state: StateManager):
+        super().__init__()
+        self.state = state
+
+    def emit(self, record):
+        try:
+            log_entry = {
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "level": record.levelname,
+                "name": record.name,
+                "msg": self.format(record)
+            }
+            asyncio.create_task(self._push(log_entry))
+        except Exception:
+            pass
+
+    async def _push(self, entry):
+        if self.state.redis:
+            await self.state.redis.lpush('logs:live', json.dumps(entry))
+            await self.state.redis.ltrim('logs:live', 0, 199)
 
 async def start_api_server(state: StateManager):
     """Run FastAPI dashboard backend."""
@@ -60,7 +70,6 @@ async def sync_dashboard(state: StateManager):
                 log_equity(total_equity)
                 log_balance(assets)
             else:
-                from config import CAPITAL
                 log_equity(float(CAPITAL))
                 log_balance([{"asset": "USDT", "balance": float(CAPITAL)}])
         except Exception as e:
@@ -68,21 +77,31 @@ async def sync_dashboard(state: StateManager):
         await asyncio.sleep(60)
 
 async def main():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(levelname)s: %(message)s')
-    log.info("═" * 60)
-    log.info("🚀 QUANT ENGINE v6.0 | Live Execution Async + Redis")
-    log.info("═" * 60)
-
-    # 1. Connect Redis
+    # 1. Connect Redis first to setup logging
     state = StateManager()
     await state.connect()
-    
-    # Initialize portfolio value
-    existing = await state.get_float('portfolio:value')
-    if not existing:
-        await state.set('portfolio:value', float(CAPITAL))
 
-    # 2. Init Managers
+    # 2. Setup Logging
+    logging.basicConfig(level=logging.INFO, format='%(name)s: %(message)s')
+    root_log = logging.getLogger()
+    root_log.addHandler(RedisLogHandler(state))
+
+    log.info("═" * 60)
+    log.info("🚀 QUANT ENGINE v6.5 | Dashboard Overhaul Active")
+    log.info("═" * 60)
+
+    # 3. Initialize Settings if missing
+    defaults = {
+        "scalper_enabled": "true", "scalper_threshold": 0.45,
+        "swing_enabled": "true", "swing_threshold": 0.55,
+        "position_enabled": "true", "position_threshold": 0.65,
+        "portfolio:value": float(CAPITAL)
+    }
+    for k, v in defaults.items():
+        if await state.get(f"settings:{k}") is None:
+            await state.set(f"settings:{k}", v)
+
+    # 4. Init Managers
     ws_feed     = WebSocketManager(SYMBOLS, state)
     candle_feed = CandleFeedManager(SYMBOLS, ["1m", "5m", "15m", "1h", "4h", "1d"], state)
     features    = FeatureEngine(SYMBOLS, state)
@@ -91,12 +110,12 @@ async def main():
     order_engine = OrderEngine(state)
     pnl_tracker = PnLTracker(state)
 
-    # 3. Init Parallel Strategies
+    # 5. Init Parallel Strategies
     scalper  = ScalperStrategy(state, pnl_tracker, capital=200.0)
     swing    = SwingStrategy(state, pnl_tracker, capital=400.0)
     position = PositionStrategy(state, pnl_tracker, capital=400.0)
 
-    # 4. Create Coroutines
+    # 6. Create Coroutines
     tasks = [
         asyncio.create_task(risk_guardian.run_loop(interval=1)),
         asyncio.create_task(order_engine.run_loop(interval=1)),

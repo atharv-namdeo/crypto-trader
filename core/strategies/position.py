@@ -28,6 +28,12 @@ class PositionStrategy:
         log.info(f"🏔️ Start POSITION Loop (Cap: ${self.capital})")
         while self.running:
             try:
+                # Check if enabled in dashboard
+                enabled = await self.state.get("settings:position_enabled")
+                if enabled == "false":
+                    await asyncio.sleep(900)
+                    continue
+
                 for symbol in self.symbols:
                     await self._process(symbol)
             except asyncio.CancelledError:
@@ -150,9 +156,22 @@ class PositionStrategy:
             
             long_score  = fuzzy.compute_long_score(indicators)
             short_score = fuzzy.compute_short_score(indicators)
-            action, conviction = fuzzy.should_trade(long_score, short_score, 'POSITION')
             
-            log.info(f"🧠 [POSITION FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} conviction={conviction:.3f}")
+            # Fetch live threshold from Redis
+            threshold = await self.state.get_float("settings:position_threshold") or 0.65
+            action, conviction = fuzzy.should_trade(long_score, short_score, 'POSITION', threshold=threshold)
+            
+            # Store fuzzy scores for dashboard radar chart
+            await self.state.set(f"fuzzy_scores:{symbol}", {
+                "rsi": indicators['rsi'],
+                "vwap": (df_4h['close'].iloc[-1] - indicators['vwap']) / indicators['vwap'] * 100,
+                "vol": indicators['vol_ratio'],
+                "adx": indicators['adx'],
+                "long": long_score,
+                "short": short_score
+            })
+            
+            log.info(f"🧠 [POSITION FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} (thresh={threshold})")
             
             if action == 'BUY' and structure == 'BULL':
                 await self._open_position(symbol, 'LONG', price, atr_4h)

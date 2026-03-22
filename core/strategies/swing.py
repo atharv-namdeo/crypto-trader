@@ -28,6 +28,12 @@ class SwingStrategy:
         log.info(f"🌊 Start SWING Loop (Cap: ${self.capital})")
         while self.running:
             try:
+                # Check if enabled in dashboard
+                enabled = await self.state.get("settings:swing_enabled")
+                if enabled == "false":
+                    await asyncio.sleep(300)
+                    continue
+
                 for symbol in self.symbols:
                     await self._process(symbol)
             except asyncio.CancelledError:
@@ -115,9 +121,22 @@ class SwingStrategy:
             
             long_score  = fuzzy.compute_long_score(indicators)
             short_score = fuzzy.compute_short_score(indicators)
-            action, conviction = fuzzy.should_trade(long_score, short_score, 'SWING')
             
-            log.info(f"🧠 [SWING FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} conviction={conviction:.3f}")
+            # Fetch live threshold from Redis
+            threshold = await self.state.get_float("settings:swing_threshold") or 0.55
+            action, conviction = fuzzy.should_trade(long_score, short_score, 'SWING', threshold=threshold)
+            
+            # Store fuzzy scores for dashboard radar chart
+            await self.state.set(f"fuzzy_scores:{symbol}", {
+                "rsi": indicators['rsi'],
+                "vwap": (df_1h['close'].iloc[-1] - indicators['vwap']) / indicators['vwap'] * 100,
+                "vol": indicators['vol_ratio'],
+                "adx": indicators['adx'],
+                "long": long_score,
+                "short": short_score
+            })
+            
+            log.info(f"🧠 [SWING FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} (thresh={threshold})")
             
             if action == 'BUY' and trend_up:
                 await self._open_position(symbol, 'LONG', price, atr_1h)

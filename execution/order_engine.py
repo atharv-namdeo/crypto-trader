@@ -100,11 +100,39 @@ class OrderEngine:
 
         if self.dry_run:
             log.info(f"📝 PAPER TRADE: {side} {market_sym} qty={qty}")
+            # Log signal even in dry run for dashboard visibility
+            try:
+                from datetime import datetime
+                signal = {
+                    'time': datetime.utcnow().timestamp(),
+                    'price': price,
+                    'type': side,
+                    'action': action,
+                    'strategy': req.get('strategy', 'UNKNOWN'),
+                    'pnl': 0
+                }
+                await self.state.redis.lpush('signals:history', json.dumps(signal))
+                await self.state.redis.ltrim('signals:history', 0, 99)
+            except: pass
             return True
 
         try:
             if action == 'OPEN':
                 await self._execute_open(market_sym, side, qty, price, req.get('stop'), req.get('tp'))
+                # Log signal for chart
+                try:
+                    from datetime import datetime
+                    signal = {
+                        'time': datetime.utcnow().timestamp(),
+                        'price': price,
+                        'type': side,
+                        'action': 'OPEN',
+                        'strategy': req.get('strategy', 'UNKNOWN'),
+                        'pnl': 0
+                    }
+                    await self.state.redis.lpush('signals:history', json.dumps(signal))
+                    await self.state.redis.ltrim('signals:history', 0, 99)
+                except: pass
             elif action == 'CLOSE':
                 await self._execute_close(market_sym, side, qty)
             return True
@@ -121,6 +149,22 @@ class OrderEngine:
         qty_str = f"{qty:.3f}" if 'BTC' in symbol else f"{qty:.2f}"
         
         log.info(f"[TESTNET ORDER] OPEN {side} {symbol} qty={qty_str} @ {price}")
+        
+        # Log signal for chart
+        try:
+            from datetime import datetime
+            signal = {
+                'time': datetime.utcnow().timestamp(),
+                'price': price,
+                'type': side,
+                'action': 'OPEN',
+                'strategy': 'UNKNOWN', # In _execute_open we don't have req, but we can pass it
+                'pnl': 0
+            }
+            # We'll need a better way to pass strategy name here. 
+            # I'll modify the signature or use a global.
+            # For now I'll modify _process_order to log signals instead.
+        except: pass
         
         main_order = await self.client.futures_create_order(
             symbol=symbol,
