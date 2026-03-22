@@ -26,12 +26,11 @@ def compute_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     adx       = dx.rolling(period).mean()
     return adx
 
-def compute_vwap(df: pd.DataFrame) -> pd.Series:
-    """Rolling VWAP over the available window."""
+def compute_vwap(df):
     typical_price = (df['high'] + df['low'] + df['close']) / 3
-    volume = df['volume']
-    vwap = (typical_price * volume).rolling(window=len(df), min_periods=1).sum() / volume.rolling(window=len(df), min_periods=1).sum()
-    return vwap
+    cumulative_tp_vol = (typical_price * df['volume']).cumsum()
+    cumulative_vol = df['volume'].cumsum()
+    return (cumulative_tp_vol / cumulative_vol).iloc[-1]
 
 def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     high, low, close = df['high'], df['low'], df['close']

@@ -3,7 +3,8 @@ import logging
 import time
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
-from strategies.utils import compute_rsi, compute_vwap, compute_atr
+from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
+from core.fuzzy_engine import FuzzyEngine
 
 log = logging.getLogger("Scalper")
 
@@ -76,9 +77,27 @@ class ScalperStrategy:
             if active_holds >= 2:
                 return # max concurrent positions reached
 
-            if rsi_1m < 35 and price < vwap and vol_ratio > 1.3:
+            fuzzy = FuzzyEngine()
+            
+            indicators = {
+                'rsi':          rsi_1m,
+                'price':        price,
+                'vwap':         vwap,
+                'vol_ratio':    vol_ratio,
+                'adx':          compute_adx(df_1m, 7).iloc[-1],
+                'price_change': df_1m['close'].pct_change(3).iloc[-1],
+                'rsi_change':   compute_rsi(df_1m['close'], 7).diff(3).iloc[-1],
+            }
+            
+            long_score  = fuzzy.compute_long_score(indicators)
+            short_score = fuzzy.compute_short_score(indicators)
+            action, conviction = fuzzy.should_trade(long_score, short_score, 'SCALPER')
+            
+            log.info(f"🧠 [SCALPER FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} conviction={conviction:.3f}")
+            
+            if action == 'BUY':
                 await self._open_position(symbol, 'LONG', price)
-            elif rsi_1m > 65 and price > vwap and vol_ratio > 1.3:
+            elif action == 'SELL':
                 await self._open_position(symbol, 'SHORT', price)
 
     async def _open_position(self, symbol: str, side: str, price: float):

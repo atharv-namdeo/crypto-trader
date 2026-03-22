@@ -3,7 +3,8 @@ import logging
 import time
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
-from strategies.utils import compute_rsi, compute_adx, compute_atr
+from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
+from core.fuzzy_engine import FuzzyEngine
 
 log = logging.getLogger("PositionTrader")
 
@@ -126,16 +127,27 @@ class PositionStrategy:
                 return
 
             rsi_4h = compute_rsi(df_4h['close'], 14)
-            dip = rsi_4h.iloc[-1] < 45 and rsi_4h.iloc[-2] < 45
-            ema20_4h = df_4h['close'].ewm(span=20).mean().iloc[-1]
-            near_support = price < ema20_4h * 1.01
+            fuzzy = FuzzyEngine()
             
-            bounce = rsi_4h.iloc[-1] > 60 and rsi_4h.iloc[-2] > 60
-            near_resistance = price > ema20_4h * 0.99
+            indicators = {
+                'rsi':          rsi_4h.iloc[-1],
+                'price':        price,
+                'vwap':         compute_vwap(df_4h),
+                'vol_ratio':    df_4h['volume'].iloc[-1] / (df_4h['volume'].rolling(20).mean().iloc[-1] + 1e-9),
+                'adx':          adx_4h,
+                'price_change': df_4h['close'].pct_change(3).iloc[-1],
+                'rsi_change':   rsi_4h.diff(3).iloc[-1],
+            }
             
-            if structure == 'BULL' and dip and near_support:
+            long_score  = fuzzy.compute_long_score(indicators)
+            short_score = fuzzy.compute_short_score(indicators)
+            action, conviction = fuzzy.should_trade(long_score, short_score, 'POSITION')
+            
+            log.info(f"🧠 [POSITION FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} conviction={conviction:.3f}")
+            
+            if action == 'BUY' and structure == 'BULL':
                 await self._open_position(symbol, 'LONG', price, atr_4h)
-            elif structure == 'BEAR' and bounce and near_resistance:
+            elif action == 'SELL' and structure == 'BEAR':
                 await self._open_position(symbol, 'SHORT', price, atr_4h)
 
     async def _open_position(self, symbol: str, side: str, price: float, atr: float):

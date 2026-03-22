@@ -3,7 +3,8 @@ import logging
 import time
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
-from strategies.utils import compute_rsi, compute_atr
+from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
+from core.fuzzy_engine import FuzzyEngine
 
 log = logging.getLogger("Swing")
 
@@ -92,21 +93,27 @@ class SwingStrategy:
             if active_holds >= 2:
                 return
 
-            # Long Entry (local low)
-            price_ll = df_1h['low'].iloc[-1] < df_1h['low'].iloc[-3]
-            rsi_hl = rsi_1h.iloc[-1] > rsi_1h.iloc[-3]
-            near_ema = abs(price - ema21_1h.iloc[-1]) / ema21_1h.iloc[-1] < 0.005
-            is_local_low = price_ll and rsi_hl and near_ema
+            fuzzy = FuzzyEngine()
             
-            # Short Entry (local high)
-            price_hh = df_1h['high'].iloc[-1] > df_1h['high'].iloc[-3]
-            rsi_lh = rsi_1h.iloc[-1] < rsi_1h.iloc[-3]
-            near_ema_short = abs(price - ema21_1h.iloc[-1]) / ema21_1h.iloc[-1] < 0.005
-            is_local_high = price_hh and rsi_lh and near_ema_short
+            indicators = {
+                'rsi':          rsi_1h.iloc[-1],
+                'price':        price,
+                'vwap':         compute_vwap(df_1h),
+                'vol_ratio':    df_1h['volume'].iloc[-1] / (df_1h['volume'].rolling(20).mean().iloc[-1] + 1e-9),
+                'adx':          compute_adx(df_1h, 14).iloc[-1],
+                'price_change': df_1h['close'].pct_change(3).iloc[-1],
+                'rsi_change':   rsi_1h.diff(3).iloc[-1],
+            }
             
-            if is_local_low and trend_up:
+            long_score  = fuzzy.compute_long_score(indicators)
+            short_score = fuzzy.compute_short_score(indicators)
+            action, conviction = fuzzy.should_trade(long_score, short_score, 'SWING')
+            
+            log.info(f"🧠 [SWING FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} conviction={conviction:.3f}")
+            
+            if action == 'BUY' and trend_up:
                 await self._open_position(symbol, 'LONG', price, atr_1h)
-            elif is_local_high and not trend_up:
+            elif action == 'SELL' and not trend_up:
                 await self._open_position(symbol, 'SHORT', price, atr_1h)
 
     async def _open_position(self, symbol: str, side: str, price: float, atr: float):
