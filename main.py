@@ -131,6 +131,9 @@ async def main():
     # 1. Connect Redis first to setup logging
     state = StateManager()
     await state.connect()
+    
+    # Verify Telegram Connection
+    await telegram.verify_connection()
 
     # 2. Setup Logging
     logging.basicConfig(level=logging.INFO, format='%(name)s: %(message)s')

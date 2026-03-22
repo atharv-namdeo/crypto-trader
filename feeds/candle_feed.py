@@ -74,14 +74,17 @@ class CandleFeedManager:
                 
                 data = []
                 for k in raw:
-                    data.append({
-                        'timestamp': k[0],
-                        'open': float(k[1]),
-                        'high': float(k[2]),
-                        'low': float(k[3]),
-                        'close': float(k[4]),
-                        'volume': float(k[5])
-                    })
+                    try:
+                        data.append({
+                            'timestamp': int(k[0]),
+                            'open':   float(k[1]),
+                            'high':   float(k[2]),
+                            'low':    float(k[3]),
+                            'close':  float(k[4]),
+                            'volume': float(k[5]),
+                        })
+                    except (IndexError, ValueError, TypeError):
+                        continue  # skip malformed candles
                 df = pd.DataFrame(data)
                 
                 # Store in Redis

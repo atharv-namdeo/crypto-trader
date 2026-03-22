@@ -22,6 +22,22 @@ class TelegramNotifier:
         self.enabled = bool(self.token and self.chat_id)
         self._initialized = True
     
+    async def verify_connection(self):
+        if not self.enabled:
+            self.log.warning("Telegram not configured — skipping")
+            return False
+        try:
+            await self.bot.send_message(
+                chat_id=self.chat_id,
+                text="🤖 QuantBot connected successfully!"
+            )
+            self.log.info("✅ Telegram connected")
+            return True
+        except Exception as e:
+            self.log.error(f"Telegram verify failed: {e}")
+            self.log.error("Make sure you sent /start to your bot first")
+            return False
+
     async def send(self, message: str):
         if not self.enabled:
             return

@@ -98,17 +98,19 @@ class FuzzyEngine:
         weighted_sum = sum(v * w for v, w in scores.values())
         return weighted_sum / total_weight
 
-    def should_trade(self, long_score: float, short_score: float, strategy: str) -> tuple:
+    def should_trade(self, long_score: float, short_score: float,
+                     strategy: str, threshold: float = None) -> tuple:
         """
         Defuzzify: convert fuzzy scores to crisp BUY/SELL/HOLD decision
         Thresholds vary by strategy aggressiveness
         """
-        thresholds = {
-            'SCALPER':  0.45,  # most aggressive, fires more often
-            'SWING':    0.55,  # moderate
-            'POSITION': 0.65,  # most conservative, only high conviction
-        }
-        threshold = thresholds.get(strategy, 0.50)
+        if threshold is None:
+            thresholds = {
+                'SCALPER':  0.45,  # most aggressive, fires more often
+                'SWING':    0.55,  # moderate
+                'POSITION': 0.65,  # most conservative, only high conviction
+            }
+            threshold = thresholds.get(strategy, 0.50)
 
         if long_score > short_score and long_score >= threshold:
             return 'BUY', long_score
