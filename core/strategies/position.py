@@ -1,12 +1,19 @@
 import asyncio
 import logging
 import time
+import traceback
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
 from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
 from core.fuzzy_engine import FuzzyEngine
 
 log = logging.getLogger("PositionTrader")
+
+def safe_last(value):
+    """Get last value whether it's a Series or scalar"""
+    if hasattr(value, 'iloc'):
+        return float(value.iloc[-1])
+    return float(value)
 
 class PositionStrategy:
     def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 400.0):
@@ -27,6 +34,7 @@ class PositionStrategy:
                 break
             except Exception as e:
                 log.error(f"PositionTrader error: {e}")
+                log.error(traceback.format_exc())
             await asyncio.sleep(900)  # 15 minutes
 
     async def _process(self, symbol: str):
@@ -46,11 +54,11 @@ class PositionStrategy:
 
         pos = await self.state.get(f"position:pos:{symbol}")
         
-        adx_4h = compute_adx(df_4h, 14).iloc[-1]
+        adx_4h = safe_last(compute_adx(df_4h, 14))
         strong_trend = adx_4h > 25
         
-        ema20_1d = df_1d['close'].ewm(span=20).mean().iloc[-1]
-        ema50_1d = df_1d['close'].ewm(span=50).mean().iloc[-1]
+        ema20_1d = safe_last(df_1d['close'].ewm(span=20).mean())
+        ema50_1d = safe_last(df_1d['close'].ewm(span=50).mean())
         daily_bull = ema20_1d > ema50_1d
         
         vol_increasing = df_4h['volume'].iloc[-3:].mean() > df_4h['volume'].iloc[-10:-3].mean()
@@ -61,7 +69,7 @@ class PositionStrategy:
         elif not daily_bull and strong_trend and vol_increasing:
             structure = 'BEAR'
             
-        atr_4h = compute_atr(df_4h, 14).iloc[-1]
+        atr_4h = safe_last(compute_atr(df_4h, 14))
         
         if pos:
             side = pos['side']
@@ -126,17 +134,18 @@ class PositionStrategy:
             if active_holds >= 1:
                 return
 
-            rsi_4h = compute_rsi(df_4h['close'], 14)
+            rsi_series_4h = compute_rsi(df_4h['close'], 14)
+            rsi_4h_val = safe_last(rsi_series_4h)
             fuzzy = FuzzyEngine()
             
             indicators = {
-                'rsi':          rsi_4h.iloc[-1],
+                'rsi':          rsi_4h_val,
                 'price':        price,
-                'vwap':         compute_vwap(df_4h),
-                'vol_ratio':    df_4h['volume'].iloc[-1] / (df_4h['volume'].rolling(20).mean().iloc[-1] + 1e-9),
+                'vwap':         safe_last(compute_vwap(df_4h)),
+                'vol_ratio':    df_4h['volume'].iloc[-1] / (safe_last(df_4h['volume'].rolling(20).mean()) + 1e-9),
                 'adx':          adx_4h,
-                'price_change': df_4h['close'].pct_change(3).iloc[-1],
-                'rsi_change':   rsi_4h.diff(3).iloc[-1],
+                'price_change': safe_last(df_4h['close'].pct_change(3)),
+                'rsi_change':   safe_last(rsi_series_4h.diff(3)),
             }
             
             long_score  = fuzzy.compute_long_score(indicators)

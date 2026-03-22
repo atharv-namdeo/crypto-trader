@@ -1,12 +1,19 @@
 import asyncio
 import logging
 import time
+import traceback
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
 from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
 from core.fuzzy_engine import FuzzyEngine
 
 log = logging.getLogger("Swing")
+
+def safe_last(value):
+    """Get last value whether it's a Series or scalar"""
+    if hasattr(value, 'iloc'):
+        return float(value.iloc[-1])
+    return float(value)
 
 class SwingStrategy:
     def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 400.0):
@@ -27,6 +34,7 @@ class SwingStrategy:
                 break
             except Exception as e:
                 log.error(f"Swing error: {e}")
+                log.error(traceback.format_exc())
             await asyncio.sleep(300)  # 5 minutes
 
     async def _process(self, symbol: str):
@@ -40,10 +48,10 @@ class SwingStrategy:
         pos = await self.state.get(f"swing:pos:{symbol}")
         
         # Compute indicators
-        rsi_1h = compute_rsi(df_1h['close'], 14)
-        atr_1h = compute_atr(df_1h, 14).iloc[-1]
-        ema21_1h = df_1h['close'].ewm(span=21).mean()
-        ema50_4h = df_4h['close'].ewm(span=50).mean().iloc[-1]
+        rsi_series_1h = compute_rsi(df_1h['close'], 14)
+        rsi_val_1h = safe_last(rsi_series_1h)
+        atr_1h = safe_last(compute_atr(df_1h, 14))
+        ema50_4h = safe_last(df_4h['close'].ewm(span=50).mean())
         
         trend_up = price > ema50_4h
         
@@ -64,7 +72,7 @@ class SwingStrategy:
                     pos['stop'] = entry + 0.5 * atr_1h
                     await self.state.set(f"swing:pos:{symbol}", pos)
                     
-                if rsi_1h.iloc[-1] > 65: exit_reason = 'RSI_OVERBOUGHT'
+                if rsi_val_1h > 65: exit_reason = 'RSI_OVERBOUGHT'
                 elif price > ema50_4h * 1.02: exit_reason = 'TARGET_4H'
                 elif elapsed_h > 6: exit_reason = 'TIME_STOP'
                 elif price >= tp: exit_reason = 'TAKE_PROFIT'
@@ -75,7 +83,7 @@ class SwingStrategy:
                     pos['stop'] = entry - 0.5 * atr_1h
                     await self.state.set(f"swing:pos:{symbol}", pos)
                     
-                if rsi_1h.iloc[-1] < 35: exit_reason = 'RSI_OVERSOLD'
+                if rsi_val_1h < 35: exit_reason = 'RSI_OVERSOLD'
                 elif price < ema50_4h * 0.98: exit_reason = 'TARGET_4H'
                 elif elapsed_h > 6: exit_reason = 'TIME_STOP'
                 elif price <= tp: exit_reason = 'TAKE_PROFIT'
@@ -96,13 +104,13 @@ class SwingStrategy:
             fuzzy = FuzzyEngine()
             
             indicators = {
-                'rsi':          rsi_1h.iloc[-1],
+                'rsi':          rsi_val_1h,
                 'price':        price,
-                'vwap':         compute_vwap(df_1h),
-                'vol_ratio':    df_1h['volume'].iloc[-1] / (df_1h['volume'].rolling(20).mean().iloc[-1] + 1e-9),
-                'adx':          compute_adx(df_1h, 14).iloc[-1],
-                'price_change': df_1h['close'].pct_change(3).iloc[-1],
-                'rsi_change':   rsi_1h.diff(3).iloc[-1],
+                'vwap':         safe_last(compute_vwap(df_1h)),
+                'vol_ratio':    df_1h['volume'].iloc[-1] / (safe_last(df_1h['volume'].rolling(20).mean()) + 1e-9),
+                'adx':          safe_last(compute_adx(df_1h, 14)),
+                'price_change': safe_last(df_1h['close'].pct_change(3)),
+                'rsi_change':   safe_last(rsi_series_1h.diff(3)),
             }
             
             long_score  = fuzzy.compute_long_score(indicators)

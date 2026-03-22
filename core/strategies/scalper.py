@@ -1,12 +1,19 @@
 import asyncio
 import logging
 import time
+import traceback
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
 from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
 from core.fuzzy_engine import FuzzyEngine
 
 log = logging.getLogger("Scalper")
+
+def safe_last(value):
+    """Get last value whether it's a Series or scalar"""
+    if hasattr(value, 'iloc'):
+        return float(value.iloc[-1])
+    return float(value)
 
 class ScalperStrategy:
     def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 200.0):
@@ -27,6 +34,7 @@ class ScalperStrategy:
                 break
             except Exception as e:
                 log.error(f"Scalper error: {e}")
+                log.error(traceback.format_exc())
             await asyncio.sleep(30)
 
     async def _process(self, symbol: str):
@@ -38,11 +46,15 @@ class ScalperStrategy:
         pos = await self.state.get(f"scalper:pos:{symbol}")
         
         # Compute indicators
-        rsi_1m = compute_rsi(df_1m['close'], 7).iloc[-1]
-        vwap = compute_vwap(df_1m).iloc[-1]
-        vol_sma = df_1m['volume'].rolling(10).mean().iloc[-1]
+        rsi_series = compute_rsi(df_1m['close'], 7)
+        rsi_1m = safe_last(rsi_series)
+        
+        vwap_raw = compute_vwap(df_1m)
+        vwap = safe_last(vwap_raw)
+        
+        vol_sma = safe_last(df_1m['volume'].rolling(10).mean())
         vol_ratio = df_1m['volume'].iloc[-1] / (vol_sma + 1e-9)
-        atr_1m = compute_atr(df_1m, 14).iloc[-1]
+        atr_1m = safe_last(compute_atr(df_1m, 14))
         
         if pos:
             # Check exit logic
@@ -84,9 +96,9 @@ class ScalperStrategy:
                 'price':        price,
                 'vwap':         vwap,
                 'vol_ratio':    vol_ratio,
-                'adx':          compute_adx(df_1m, 7).iloc[-1],
-                'price_change': df_1m['close'].pct_change(3).iloc[-1],
-                'rsi_change':   compute_rsi(df_1m['close'], 7).diff(3).iloc[-1],
+                'adx':          safe_last(compute_adx(df_1m, 7)),
+                'price_change': safe_last(df_1m['close'].pct_change(3)),
+                'rsi_change':   safe_last(rsi_series.diff(3)),
             }
             
             long_score  = fuzzy.compute_long_score(indicators)
