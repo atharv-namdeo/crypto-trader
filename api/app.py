@@ -39,6 +39,33 @@ def create_app(state: StateManager):
             await state.set(f"settings:{k}", v)
         return {"status": "updated"}
 
+    @app.get("/ml/ensemble-signal/{symbol}")
+    async def get_ensemble_signal(symbol: str):
+        data = await state.get(f"ensemble_signal:{symbol}")
+        return json.loads(data) if data else {"status": "no_data"}
+
+    @app.get("/ml/anomaly/{symbol}")
+    async def get_anomaly(symbol: str):
+        data = await state.get(f"anomaly:{symbol}")
+        return json.loads(data) if data else {"status": "no_data"}
+
+    @app.get("/ml/boruta-features/{symbol}")
+    async def get_boruta_features(symbol: str):
+        data = await state.get(f"boruta_features:{symbol}")
+        return {"features": data} if data else {"status": "no_data"}
+
+    @app.get("/strategies")
+    async def get_strategy_status():
+        stats = {}
+        for s in ["scalper", "swing", "position", "ai_ensemble"]:
+            stats[s] = {
+                "trades": int(await state.get(f"stats:{s}:trades") or 0),
+                "wins": int(await state.get(f"stats:{s}:wins") or 0),
+                "pnl": float(await state.get(f"stats:{s}:pnl") or 0.0),
+                "pos_count": len(await state.redis.keys(f"{s}:pos:*"))
+            }
+        return stats
+
     @app.get("/candles")
     async def get_candles(symbol: str, interval: str, limit: int = 200):
         # Read from Redis: ohlcv:{interval}:{symbol}
@@ -88,7 +115,7 @@ def create_app(state: StateManager):
 
                 # 2. Strategy Stats
                 stats = {}
-                for s in ["scalper", "swing", "position"]:
+                for s in ["scalper", "swing", "position", "ai_ensemble"]:
                     stats[s] = {
                         "trades": int(await state.get(f"stats:{s}:trades") or 0),
                         "wins": int(await state.get(f"stats:{s}:wins") or 0),

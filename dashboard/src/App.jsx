@@ -87,7 +87,7 @@ const App = () => {
     <div className="flex h-screen bg-bg-primary text-text-primary overflow-hidden">
       <Sidebar activeTab={activeTab} setTab={setActiveTab} botStatus="ONLINE" />
       
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto pb-20 md:pb-0">
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto pb-24 md:pb-0">
         <MarketTicker marketData={data.market} metrics={data.portfolio} />
         
         <div className="p-4 space-y-6">

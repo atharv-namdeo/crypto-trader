@@ -21,6 +21,10 @@ from core.pnl_tracker import PnLTracker
 from core.strategies.scalper import ScalperStrategy
 from core.strategies.swing import SwingStrategy
 from core.strategies.position import PositionStrategy
+from core.strategies.ai_ensemble_strategy import AIEnsembleStrategy
+from ml.anomaly_detector import AnomalyDetector
+from ml.boruta_selector import BorutaSelector
+from ml.rf_gb_predictor import RFGBPredictor
 
 from core.telegram_notifier import TelegramNotifier
 telegram = TelegramNotifier()
@@ -169,6 +173,33 @@ async def main():
     scalper  = ScalperStrategy(state, pnl_tracker, capital=200.0)
     swing    = SwingStrategy(state, pnl_tracker, capital=400.0)
     position = PositionStrategy(state, pnl_tracker, capital=400.0)
+    ai_ensemble = AIEnsembleStrategy(state, pnl_tracker, capital=200.0)
+
+    # 5.1 Startup Checks (Paper 1 & 4)
+    log.info("🔍 Running startup Anomaly Detection...")
+    detector = AnomalyDetector()
+    for symbol in SYMBOLS:
+        df_1h = await state.get_df(f"ohlcv:1h:{symbol}", n=100)
+        if df_1h is not None:
+            res = detector.detect(df_1h['close'].tolist())
+            log.info(f"Anomaly Check [{symbol}]: Z={res['z_score']:.2f} {'(!!!)' if res['is_abnormal'] else '(Normal)'}")
+
+    # 5.2 Background ML Tasks
+    async def train_ml_models():
+        log.info("🔄 Background ML training started...")
+        rf_gb = RFGBPredictor()
+        boruta = BorutaSelector()
+        for symbol in SYMBOLS:
+            df_full = await state.get_df(f"ohlcv:1h:{symbol}", n=1000)
+            if df_full is not None:
+                # Train RF/GB
+                await asyncio.get_event_loop().run_in_executor(None, rf_gb.train, df_full)
+                # Boruta Feature Selection
+                target = df_full['close'].shift(-1) > df_full['close']
+                await asyncio.get_event_loop().run_in_executor(None, boruta.select_features, df_full, target)
+        log.info("✅ Background ML training complete.")
+
+    asyncio.create_task(train_ml_models())
 
     # 6. Create Coroutines
     tasks = [
@@ -181,6 +212,7 @@ async def main():
         asyncio.create_task(scalper.run_loop()),
         asyncio.create_task(swing.run_loop()),
         asyncio.create_task(position.run_loop()),
+        asyncio.create_task(ai_ensemble.run_loop()),
         asyncio.create_task(start_api_server(state)),
         asyncio.create_task(sync_dashboard(state)),
         asyncio.create_task(daily_summary_loop(state)),

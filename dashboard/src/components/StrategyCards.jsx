@@ -9,7 +9,7 @@ const StrategyCards = ({ stats }) => {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 px-4">
       {configs.map(c => {
         const s = stats[c.id] || { trades: 0, wins: 0, pnl: 0, pos_count: 0, status: 'SCANNING' };
         const winRate = s.trades > 0 ? (s.wins / s.trades * 100).toFixed(1) : '0.0';

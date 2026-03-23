@@ -83,7 +83,8 @@ class CandleFeedManager:
                             'close':  float(k[4]),
                             'volume': float(k[5]),
                         })
-                    except (IndexError, ValueError, TypeError):
+                    except (IndexError, ValueError, TypeError) as e:
+                        log.error(f"Malformed kline detected: {k} | Error: {e}")
                         continue  # skip malformed candles
                 df = pd.DataFrame(data)
                 

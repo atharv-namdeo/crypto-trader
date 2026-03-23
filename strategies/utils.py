@@ -40,3 +40,14 @@ def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
         (low - close.shift()).abs()
     ], axis=1).max(axis=1)
     return tr.rolling(period).mean()
+
+def compute_ultosc(df: pd.DataFrame, p1: int = 7, p2: int = 14, p3: int = 28) -> pd.Series:
+    """Ultimate Oscillator"""
+    low_diff = df['close'] - df['low']
+    tp_diff = df['high'] - df['low']
+    
+    avg1 = low_diff.rolling(p1).sum() / (tp_diff.rolling(p1).sum() + 1e-9)
+    avg2 = low_diff.rolling(p2).sum() / (tp_diff.rolling(p2).sum() + 1e-9)
+    avg3 = low_diff.rolling(p3).sum() / (tp_diff.rolling(p3).sum() + 1e-9)
+    
+    return 100 * (4 * avg1 + 2 * avg2 + avg3) / 7

@@ -1,0 +1,44 @@
+name: nightly-tests
+
+# Extended test suites that are slow, large, or require special features for PR builds.
+
+permissions:
+  contents: read
+  actions: read
+
+on:
+  push:
+    branches: [test-nightly-tests]
+  schedule:
+    - cron: '0 12 * * *' # Daily at 12:00 UTC (same as security, 2hrs prior to nightly-merge)
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  turmoil:
+    name: turmoil network tests
+    runs-on: ubuntu-22.04
+    steps:
+      # https://github.com/step-security/harden-runner
+      - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
+        with:
+          egress-policy: ${{ vars.STEP_SECURITY_EGRESS_POLICY || 'block' }}
+          allowed-endpoints: >-
+            ${{ vars.COMMON_ALLOWED_ENDPOINTS }}
+            ${{ vars.CI_ALLOWED_ENDPOINTS }}
+
+      - name: Checkout repository
+        # https://github.com/actions/checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Common setup
+        uses: ./.github/actions/common-setup
+        with:
+          python-version: "3.13"
+          free-disk-space: "true"
+
+      - name: Run turmoil network tests
+        env:
+          RUST_BACKTRACE: 1
+        run: cargo nextest run -p nautilus-network --features turmoil --cargo-profile nextest --status-level fail

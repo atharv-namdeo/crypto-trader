@@ -1,0 +1,199 @@
+"""
+AI Ensemble Strategy combining weighted neural network signals, anomaly gating, and technical indicators.
+Based on: 
+- Cohen & Aiche (2025): Weighted ensemble (FNN+LSTM+GRU) + RSI/MACD/Volume scoring.
+- Alnami et al. (2025): Z-Score anomaly gating for volatility protection.
+- Springer Chapter (2024): Optimizing for return-per-trade.
+"""
+
+import asyncio
+import logging
+import time
+import json
+import os
+import traceback
+from core.state_manager import StateManager
+from core.pnl_tracker import PnLTracker
+from strategies.utils import compute_rsi, compute_atr, compute_adx, compute_ultosc
+from ml.ensemble_model import EnsembleModel
+from ml.anomaly_detector import AnomalyDetector
+
+log = logging.getLogger("AIEnsemble")
+
+class AIEnsembleStrategy:
+    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 200.0):
+        self.state = state
+        self.pnl = pnl_tracker
+        self.capital = capital
+        self.symbols = ["BTC/USDT", "ETH/USDT"]
+        self.running = False
+        self.ensemble = EnsembleModel()
+        self.anomaly_detector = AnomalyDetector(threshold=1.5) # Paper 1: Extreme anomaly gating
+        self.mode = os.getenv('AI_ENSEMBLE_MODE', 'long_only')
+        self.stability_score = self._load_stability_score()
+
+    def _load_stability_score(self):
+        try:
+            path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'ml', 'models', 'stability.json')
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    data = json.load(f)
+                    return data.get('stability_score', 0.5)
+        except Exception as e:
+            log.error(f"Error loading stability score: {e}")
+        return 0.5
+
+    async def run_loop(self):
+        self.running = True
+        log.info(f"🧠 Start AI ENSEMBLE Loop (Cap: ${self.capital}) Mode: {self.mode}")
+        while self.running:
+            try:
+                for symbol in self.symbols:
+                    await self._process(symbol)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log.error(f"AIEnsemble error: {e}")
+                log.error(traceback.format_exc())
+            await asyncio.sleep(300)  # 5 minutes cycle as requested
+
+    async def _process(self, symbol: str):
+        # 1. Gather Data
+        df_1h = await self.state.get_df(f"ohlcv:1h:{symbol}", n=100)
+        df_1m = await self.state.get_df(f"ohlcv:1m:{symbol}", n=100)
+        price = await self.state.get_float(f"price:{symbol}")
+        feature_dict = await self.state.get(f"features:{symbol}")
+        
+        if df_1h is None or len(df_1h) < 20 or not price or not feature_dict:
+            return
+
+        # 2. Anomaly Gating (Paper 1)
+        prices_1h = df_1h['close'].tolist()
+        anomaly = self.anomaly_detector.detect(prices_1h)
+        await self.state.redis.set(f"anomaly:{symbol}", json.dumps(anomaly))
+        
+        if anomaly['is_abnormal'] and abs(anomaly['z_score']) > 1.5:
+            log.warning(f"⚠️ [AI ENSEMBLE] Skipping {symbol} due to Extreme Anomaly (Z={anomaly['z_score']:.2f})")
+            return
+
+        # 3. Model Prediction (Paper 5)
+        model_res = self.ensemble.predict(feature_dict)
+        await self.state.redis.set(f"ensemble_signal:{symbol}", json.dumps(model_res))
+        ml_signal = 0
+        if model_res['signal'] == 'BUY': ml_signal = 1
+        elif model_res['signal'] == 'SELL': ml_signal = -1
+
+        # 4. Confirmation Indicators (Paper 5)
+        # RSI
+        rsi_val = float(compute_rsi(df_1h['close'], 14).iloc[-1])
+        rsi_sig = 0
+        if rsi_val < 30: rsi_sig = 1
+        elif rsi_val > 70: rsi_sig = -1
+        
+        # Ultimate Oscillator (GitHub Repo Integration)
+        ultosc_val = float(compute_ultosc(df_1h).iloc[-1])
+        ultosc_sig = 0
+        if ultosc_val < 30: ultosc_sig = 1
+        elif ultosc_val > 70: ultosc_sig = -1
+        
+        # MACD (using EMA 12, 26, 9)
+        ema12 = df_1h['close'].ewm(span=12).mean()
+        ema26 = df_1h['close'].ewm(span=26).mean()
+        macd_line = ema12 - ema26
+        signal_line = macd_line.ewm(span=9).mean()
+        
+        macd_sig = 0
+        if macd_line.iloc[-1] > signal_line.iloc[-1] and macd_line.iloc[-2] <= signal_line.iloc[-2]:
+            macd_sig = 1
+        elif macd_line.iloc[-1] < signal_line.iloc[-1] and macd_line.iloc[-2] >= signal_line.iloc[-2]:
+            macd_sig = -1
+            
+        # Volume
+        vol_sma20 = df_1h['volume'].rolling(20).mean().iloc[-1]
+        vol_curr = df_1h['volume'].iloc[-1]
+        vol_sig = 0
+        if vol_curr > 1.5 * vol_sma20: vol_sig = 1
+        elif vol_curr < 0.5 * vol_sma20: vol_sig = -1
+        
+        # 5. Weighted Score Calculation (Paper 5 Eq 1 + GitHub Algo)
+        # score = 0.15*RSI + 0.15*ULTOSC + 0.3*MACD + 0.2*Vol + 0.2*ML
+        score = (0.15 * rsi_sig) + (0.15 * ultosc_sig) + (0.3 * macd_sig) + (0.2 * vol_sig) + (0.2 * ml_signal)
+        
+        log.info(f"📊 [AI ENSEMBLE] {symbol} Score: {score:.2f} (RSI:{rsi_sig} ULTOSC:{ultosc_sig} MACD:{macd_sig} Vol:{vol_sig} ML:{ml_signal})")
+
+        # 6. Trade Logic
+        pos = await self.state.get(f"ai_ensemble:pos:{symbol}")
+        
+        if pos:
+            # Simple ATR Stop/TP
+            entry = pos['entry']
+            side = pos['side']
+            atr = float(compute_atr(df_1h, 14).iloc[-1])
+            
+            pnl_pct = (price - entry) / entry if side == 'LONG' else (entry - price) / entry
+            
+            exit_reason = None
+            if side == 'LONG':
+                if price <= entry - 1.5 * atr: exit_reason = "STOP_LOSS"
+                elif price >= entry + 3.0 * atr: exit_reason = "TAKE_PROFIT"
+                elif score < -0.3: exit_reason = "SIGNAL_REVERSAL"
+            else:
+                if price >= entry + 1.5 * atr: exit_reason = "STOP_LOSS"
+                elif price <= entry - 3.0 * atr: exit_reason = "TAKE_PROFIT"
+                elif score > 0.3: exit_reason = "SIGNAL_REVERSAL"
+                
+            if exit_reason:
+                await self._close_position(symbol, pos, price, exit_reason)
+        else:
+            if score > 0.5:
+                # BUY
+                await self._open_position(symbol, 'LONG', price, model_res['confidence'])
+            elif score < -0.5 and self.mode == 'long_short':
+                # SELL
+                await self._open_position(symbol, 'SHORT', price, model_res['confidence'])
+
+    async def _open_position(self, symbol: str, side: str, price: float, confidence: float):
+        # Scale quantity based on stability score (GitHub Algo logic)
+        risk_multiplier = 0.5 + (self.stability_score * 0.5)  # Range 0.5 to 1.0
+        qty = (self.capital * 0.5 * risk_multiplier) / price
+        pos = {
+            'side': side,
+            'entry': price,
+            'qty': qty,
+            'time': time.time(),
+            'strategy': 'AI_ENSEMBLE'
+        }
+        await self.state.set(f"ai_ensemble:pos:{symbol}", pos)
+        
+        # Signal for dashboard
+        signal = {
+            'time': time.time(),
+            'price': price,
+            'type': side,
+            'action': 'OPEN',
+            'strategy': 'AI_ENSEMBLE'
+        }
+        await self.state.redis.lpush('signals:history', json.dumps(signal))
+        await self.state.redis.ltrim('signals:history', 0, 99)
+        
+        # Order Request
+        req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'strategy': 'AI_ENSEMBLE'}
+        await self.state.redis.rpush(f"order_queue:{symbol}", json.dumps(req))
+        
+        log.info(f"🚀 [AI ENSEMBLE] OPEN {side} {symbol} at {price:.2f}")
+
+    async def _close_position(self, symbol: str, pos: dict, price: float, reason: str):
+        entry = pos['entry']
+        side = pos['side']
+        qty = pos['qty']
+        
+        pnl_usd = (price - entry) * qty if side == 'LONG' else (entry - price) * qty
+        await self.pnl.record_trade('AI_ENSEMBLE', symbol, side, entry, price, qty, reason)
+        
+        await self.state.redis.delete(f"ai_ensemble:pos:{symbol}")
+        
+        # Order Request
+        req = {'action': 'CLOSE', 'side': side, 'qty': qty, 'strategy': 'AI_ENSEMBLE'}
+        await self.state.redis.rpush(f"order_queue:{symbol}", json.dumps(req))
+        
+        log.info(f"🛑 [AI ENSEMBLE] CLOSE {side} {symbol} at {price:.2f} PnL: ${pnl_usd:.2f} ({reason})")

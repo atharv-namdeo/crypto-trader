@@ -26,9 +26,10 @@ const TradingChart = ({ symbol, timeframe, initialCandles, signals }) => {
   const [chartData, setChartData] = useState([]);
   const [visibleCount, setVisibleCount] = useState(100);
   const [panOffset, setPanOffset] = useState(0);
-  const chartRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState(0);
 
-  // Append new candles, keep last 200
+  // Append new candles, keep last 500 for better panning history
   useEffect(() => {
     if (!initialCandles || initialCandles.length === 0) return;
     
@@ -36,28 +37,62 @@ const TradingChart = ({ symbol, timeframe, initialCandles, signals }) => {
       const combined = [...prev, ...initialCandles.filter(
         c => !prev.find(p => p.time === c.time)
       )];
-      // Sort by time
       combined.sort((a, b) => a.time - b.time);
-      return combined.slice(-200);
+      return combined.slice(-500);
     });
   }, [initialCandles]);
 
   // Handle Zoom (Mouse Wheel)
   const handleWheel = (e) => {
     if (e.deltaY < 0) {
-      setVisibleCount(prev => Math.max(10, prev - 5));
+      setVisibleCount(prev => Math.max(20, prev - 10));
     } else {
-      setVisibleCount(prev => Math.min(200, prev + 5));
+      setVisibleCount(prev => Math.min(500, prev + 10));
     }
   };
 
+  // Panning logic
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setDragStart(e.clientX);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    const delta = e.clientX - dragStart;
+    if (Math.abs(delta) > 5) {
+      const shift = Math.round(delta / 5);
+      setPanOffset(prev => {
+        const newVal = prev + shift; // Reverse logic: drag right -> more history -> higher panOffset? 
+        // Wait: slice(-start, -end). Pan right (delta > 0) -> see OLDER data -> Increase panOffset.
+        // Pan left (delta < 0) -> see NEWER data -> Decrease panOffset.
+        const maxOffset = Math.max(0, chartData.length - visibleCount);
+        return Math.max(0, Math.min(maxOffset, newVal));
+      });
+      setDragStart(e.clientX);
+    }
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
   // Prepare visible data
-  const dataSlice = chartData.slice(-(visibleCount + panOffset), panOffset === 0 ? undefined : -panOffset);
+  const dataSlice = chartData.slice(
+    Math.max(0, chartData.length - visibleCount - panOffset),
+    panOffset === 0 ? undefined : Math.max(1, chartData.length - panOffset)
+  );
+
   const xMin = dataSlice[0]?.time;
   const xMax = dataSlice[dataSlice.length - 1]?.time;
 
   return (
-    <div className="card p-4 h-full flex flex-col gap-4 relative" onWheel={handleWheel}>
+    <div 
+      className={`card p-4 h-full flex flex-col gap-4 relative select-none ${isDragging ? 'cursor-grabbing' : 'cursor-default'}`}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
       <div className="flex justify-between items-center px-2">
         <div className="flex items-center gap-4">
           <h3 className="text-sm font-black text-text-primary uppercase tracking-tighter">
@@ -69,6 +104,9 @@ const TradingChart = ({ symbol, timeframe, initialCandles, signals }) => {
           </div>
         </div>
         <div className="flex gap-2">
+            <div className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded border border-accent/20">
+              {dataSlice.length} CANDLES
+            </div>
            <button className="p-1 hover:text-accent"><Maximize2 size={16}/></button>
         </div>
       </div>
@@ -79,7 +117,7 @@ const TradingChart = ({ symbol, timeframe, initialCandles, signals }) => {
             <CartesianGrid strokeDasharray="3 3" stroke="#1e2b3d" vertical={false} opacity={0.5} />
             <XAxis 
               dataKey="time" 
-              domain={[xMin, xMax]}
+              domain={['dataMin', 'dataMax']}
               type="number"
               scale="time"
               tickFormatter={(t) => new Date(t * 1000).toLocaleTimeString('en-IN', {
@@ -90,6 +128,7 @@ const TradingChart = ({ symbol, timeframe, initialCandles, signals }) => {
               tick={{ fill: '#4a5a70', fontSize: 10, fontWeight: 800 }}
               axisLine={false}
               minTickGap={30}
+              allowDataOverflow={true}
             />
             <YAxis 
               domain={['auto', 'auto']} 
@@ -112,36 +151,36 @@ const TradingChart = ({ symbol, timeframe, initialCandles, signals }) => {
               stroke="#00d4aa" 
               strokeWidth={2} 
               dot={false} 
+              isAnimationActive={false}
               activeDot={{ r: 4, stroke: '#fff', strokeWidth: 2 }}
             />
 
-            {/* Signal Markers */}
+            {/* Render Signals using ReferenceDots for precise placement */}
             {signals.map((sig, i) => {
-              // Only render if in visible range
               if (sig.time < xMin || sig.time > xMax) return null;
               
-              const isBuy = sig.action === 'OPEN' && sig.type === 'LONG';
-              const isShort = sig.action === 'OPEN' && sig.type === 'SHORT';
+              const isBuy = (sig.action === 'OPEN' && sig.type === 'LONG') || (sig.action === 'CLOSE' && sig.type === 'SHORT');
+              const isSell = (sig.action === 'OPEN' && sig.type === 'SHORT') || (sig.action === 'CLOSE' && sig.type === 'LONG');
               const isClose = sig.action === 'CLOSE';
               
               const color = COLORS[sig.strategy] || '#fff';
-              const icon = isBuy ? '▲' : isShort ? '▼' : '●';
-              const yPos = isBuy ? sig.price * 0.999 : isShort ? sig.price * 1.001 : sig.price;
+              const icon = isBuy ? '▲' : isSell ? '▼' : '●';
 
               return (
                 <ReferenceDot
-                  key={i}
+                  key={`signal-${sig.time}-${i}`}
                   x={sig.time}
                   y={sig.price}
                   r={isClose ? 4 : 6}
                   fill={isClose ? '#fff' : (isBuy ? COLORS.BUY : COLORS.SELL)}
                   stroke={color}
                   strokeWidth={2}
+                  isAnimationActive={false}
                   label={{
                     value: icon,
                     position: isBuy ? 'bottom' : 'top',
-                    fill: isBuy ? COLORS.BUY : (isShort ? COLORS.SELL : '#fff'),
-                    fontSize: 14,
+                    fill: isBuy ? COLORS.BUY : (isSell ? COLORS.SELL : '#fff'),
+                    fontSize: 16,
                     fontWeight: 900
                   }}
                 />
@@ -153,14 +192,15 @@ const TradingChart = ({ symbol, timeframe, initialCandles, signals }) => {
 
       <div className="flex flex-wrap items-center gap-6 px-4 py-2 bg-bg-secondary/50 rounded-xl border border-border/40">
         <div className="flex items-center gap-4 border-r border-border pr-6">
-           <LegendItem icon="▲" label="Long Entry" color={COLORS.BUY} />
-           <LegendItem icon="▼" label="Short Entry" color={COLORS.SELL} />
+           <LegendItem icon="▲" label="Buy/Long" color={COLORS.BUY} />
+           <LegendItem icon="▼" label="Sell/Short" color={COLORS.SELL} />
            <LegendItem icon="●" label="Close" color="#fff" />
         </div>
-        <div className="flex items-center gap-4">
-           <LegendItem icon="■" label="Scalper" color={COLORS.SCALPER} />
-           <LegendItem icon="■" label="Swing" color={COLORS.SWING} />
-           <LegendItem icon="■" label="Position" color={COLORS.POSITION} />
+        <div className="flex items-center gap-4 text-[10px] font-bold text-text-muted">
+           Strategies: 
+           <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{background: COLORS.SCALPER}}/> Scalper</div>
+           <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{background: COLORS.SWING}}/> Swing</div>
+           <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{background: COLORS.POSITION}}/> Position</div>
         </div>
       </div>
     </div>

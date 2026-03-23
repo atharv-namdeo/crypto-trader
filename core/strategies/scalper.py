@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+import json
 import traceback
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
@@ -146,6 +147,17 @@ class ScalperStrategy:
         req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': 0, 'tp': 0, 'strategy': 'SCALPER'}
         await self.state.set(f"order_request:{symbol}", req)
         
+        # Record signal for dashboard
+        signal = {
+            'time': time.time(),
+            'price': price,
+            'type': 'LONG' if side == 'LONG' else 'SHORT',
+            'action': 'OPEN',
+            'strategy': 'SCALPER'
+        }
+        await self.state.redis.lpush('signals:history', json.dumps(signal))
+        await self.state.redis.ltrim('signals:history', 0, 99)
+
         # Telegram notification
         from core.telegram_notifier import TelegramNotifier
         await TelegramNotifier().trade_opened('SCALPER', symbol, side, price, qty, 0, 0, conviction)

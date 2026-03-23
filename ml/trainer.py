@@ -18,6 +18,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from ml.feature_builder import FEATURE_KEYS
+from ml.github_algo_utils import compute_thresholds, simulate_strategy
+import json
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(levelname)s: %(message)s')
 log = logging.getLogger("Trainer")
@@ -184,9 +186,27 @@ class MLTrainer:
         log.info(f"✅ LSTM Test Accuracy: {acc:.2%} (Loss: {total_loss/len(train_loader):.4f})")
         torch.save(model.state_dict(), os.path.join(self.model_dir, 'lstm.pth'))
 
+    def compute_stability(self, df):
+        log.info("🎲 Running Monte Carlo Stability Simulation...")
+        # Get thresholds based on returns
+        returns = df['close'].pct_change().dropna().values
+        a, b = compute_thresholds(returns)
+        
+        # Determine best window sizes (simplified grid search or fixed defaults from notebook)
+        best_backW = 3 
+        best_forW = 3
+        
+        stability_score, mean_profit = simulate_strategy(df, best_backW, best_forW, a, b, num_simulations=50)
+        log.info(f"📊 Stability Score: {stability_score:.4f}, Mean Sim Profit: {mean_profit:.2f}")
+        
+        with open(os.path.join(self.model_dir, 'stability.json'), 'w') as f:
+            json.dump({'stability_score': stability_score, 'timestamp': time.time()}, f)
+        return stability_score
+
     def run(self):
         log.info("=== Starting Automated ML Pipeline ===")
         df = self.fetch_data()
+        self.compute_stability(df)
         X, y = self.build_dataset(df)
         self.train_xgboost(X, y)
         self.train_lstm(X, y)
