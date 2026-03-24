@@ -33,6 +33,29 @@ class RiskManager:
         self.state = state
         self.running = False
 
+    async def run_loop(self, interval: int = 1):
+        """
+        Background safety loop. 
+        Enforces daily/weekly drawdown limits in real-time.
+        """
+        self.running = True
+        log.info(f"🛡️ RiskManager Loop Active (Circuit Breaker: {self.MAX_DAILY_DRAWDOWN*100}%)")
+        while self.running:
+            try:
+                # 1. Check Drawdown
+                is_safe = await self.check_drawdown()
+                if not is_safe:
+                    log.critical("🚨 CIRCUIT BREAKER TRIGGERED: Daily Drawdown Limit Hit!")
+                    # In a real system, we might set a global lock or force-close all
+                    await self.state.set("risk:circuit_breaker", "ACTIVE")
+                
+                # 2. Daily/Weekly Reset Logic (Optional - usually handled by state manager)
+                
+            except Exception as e:
+                log.error(f"RiskManager loop error: {e}")
+            
+            await asyncio.sleep(interval)
+
     async def check_drawdown(self) -> bool:
         """Check if daily or weekly drawdown limits have been hit."""
         try:
