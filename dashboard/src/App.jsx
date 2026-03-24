@@ -13,6 +13,9 @@ import TradeHistory from './components/TradeHistory';
 import SignalHeatmap from './components/SignalHeatmap';
 import TradingChart from './components/TradingChart';
 
+const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
+const WS_BASE = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:8000/ws`;
+
 const App = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [timeframe, setTimeframe] = useState('1h');
@@ -34,7 +37,7 @@ const App = () => {
 
   const fetchCandles = async (tf) => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:8000/candles?symbol=BTC/USDT&interval=${tf}&limit=200`);
+      const res = await fetch(`${API_BASE}/candles?symbol=BTC/USDT&interval=${tf}&limit=200`);
       const candles = await res.json();
       setChartCandles(candles);
     } catch (e) {
@@ -47,7 +50,7 @@ const App = () => {
   }, [timeframe]);
 
   useEffect(() => {
-    const ws = new WebSocket(`ws://${window.location.hostname}:8000/ws`);
+    const ws = new WebSocket(WS_BASE);
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'engine_update') {
@@ -67,7 +70,7 @@ const App = () => {
 
   const handleAction = async (type, payload) => {
     console.log('Action:', type, payload);
-    const res = await fetch(`http://${window.location.hostname}:8000/api/v1/order`, {
+    const res = await fetch(`${API_BASE}/api/v1/order`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: type, ...payload })
@@ -76,7 +79,7 @@ const App = () => {
   };
 
   const updateSettings = async (key, value) => {
-    await fetch(`http://${window.location.hostname}:8000/api/v1/settings`, {
+    await fetch(`${API_BASE}/api/v1/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [key]: value })
