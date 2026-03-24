@@ -1,0 +1,42 @@
+{
+  "family": "crypto-trader",
+  "containerDefinitions": [
+    {
+      "name": "redis",
+      "image": "redis:7-alpine",
+      "portMappings": [
+        {
+          "containerPort": 6379,
+          "hostPort": 6379
+        }
+      ],
+      "memory": 512,
+      "essential": true
+    },
+    {
+      "name": "trading-bot",
+      "image": "crypto-trader:phase10-prod",
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000
+        }
+      ],
+      "memory": 2048,
+      "cpu": 1024,
+      "essential": true,
+      "environment": [
+        { "name": "REDIS_URL", "value": "redis://localhost:6379" },
+        { "name": "ENABLE_LIVE_TRADING", "value": "true" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/crypto-trader",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

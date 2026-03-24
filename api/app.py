@@ -8,10 +8,15 @@ from datetime import datetime
 from core.state_manager import StateManager
 from api.metrics import router as metrics_router
 
+from security.production_hardening import setup_production_security
+
 log = logging.getLogger("FastAPI")
 
 def create_app(state: StateManager):
     app = FastAPI(title="Quant Engine API", version="5.0")
+    
+    # --- PHASE 10: PRODUCTION SECURITY ---
+    setup_production_security(app)
 
     app.add_middleware(
         CORSMiddleware,
