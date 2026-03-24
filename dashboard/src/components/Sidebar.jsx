@@ -3,9 +3,10 @@ import { LayoutDashboard, Brain, Activity, Briefcase, Settings, Cpu, ShieldCheck
 
 const Sidebar = ({ activeTab, setTab, botStatus }) => {
   const links = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'trading', label: 'Trading', icon: Activity },
-    { id: 'signals', label: 'Signals', icon: Brain },
+    { id: 'dashboard', label: 'Monitor', icon: LayoutDashboard },
+    { id: 'live', label: 'Live Trading', icon: ShieldCheck },
+    { id: 'trading', label: 'Manual', icon: Activity },
+    { id: 'signals', label: 'Intelligence', icon: Brain },
     { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];

@@ -25,15 +25,21 @@ class StateManager:
         self._pubsub: Optional[redis.client.PubSub] = None
 
     async def connect(self):
-        """Establish Redis connection."""
-        try:
-            import redis.asyncio as redis
-            self.redis = redis.from_url(self.url, decode_responses=True)
-            await self.redis.ping()
-            log.info(f"✅ Connected to Redis at {self.url}")
-        except Exception as e:
-            log.critical(f"❌ Redis connection failed: {e}")
-            raise
+        """Establish Redis connection with retry logic."""
+        import redis.asyncio as redis
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                self.redis = redis.from_url(self.url, decode_responses=True)
+                await self.redis.ping()
+                log.info(f"✅ Connected to Redis at {self.url}")
+                return
+            except Exception as e:
+                log.warning(f"⚠️ Redis connection attempt {attempt+1}/{max_retries} failed: {e}")
+                if attempt == max_retries - 1:
+                    log.critical("❌ Could not connect to Redis after multiple attempts.")
+                    raise
+                await asyncio.sleep(2 ** attempt)
 
     async def close(self):
         """Close Redis connection."""

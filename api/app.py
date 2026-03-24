@@ -3,7 +3,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import logging
+import time
+from datetime import datetime
 from core.state_manager import StateManager
+from api.metrics import router as metrics_router
 
 log = logging.getLogger("FastAPI")
 
@@ -22,6 +25,8 @@ def create_app(state: StateManager):
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.include_router(metrics_router)
 
     @app.get("/health")
     async def health():
@@ -139,7 +144,42 @@ def create_app(state: StateManager):
                             for tf in ["1m", "5m", "15m", "1h", "4h"]
                         }
                     }
+                    
+                    # 1.1 ML Ensemble Signals
+                    ml_sig = await state.get(f"ml_signal:{symbol}")
+                    if ml_sig:
+                        if isinstance(ml_sig, str):
+                            try: ml_sig = json.loads(ml_sig)
+                            except: pass
+                        
+                        # Send as separate message for the MLSignalPanel component
+                        await websocket.send_json({
+                            "type": "ML_UPDATE",
+                            "symbol": symbol,
+                            "signal": ml_sig.get('signal'),
+                            "confidence": ml_sig.get('confidence'),
+                            "latency": ml_sig.get('latency', 84) # fallback
+                        })
                 payload["data"]["market"] = market_data
+                
+                # 1.2 Signal Quality History
+                sq_history = await state.redis.lrange('signal_quality:history', 0, 0)
+                if sq_history:
+                    sq = json.loads(sq_history[0])
+                    await websocket.send_json({
+                        "type": "SIGNAL_QUALITY",
+                        "symbol": sq['symbol'] if 'symbol' in sq else "BTC/USDT",
+                        "accuracy": sq['accuracy']
+                    })
+                
+                # 1.3 Rollout Status
+                rollout_phase = await state.get('rollout:current_phase') or 'PHASE_1_MICRO'
+                rollout_start = await state.get_float('rollout:phase_start_time') or 0.0
+                await websocket.send_json({
+                    "type": "ROLLOUT_UPDATE",
+                    "phase": rollout_phase,
+                    "elapsed_days": round((time.time() - rollout_start) / 86400, 1) if rollout_start > 0 else 0
+                })
                 
                 # Push latest candle to chart if needed
                 payload["data"]["latest_candles"] = market_data["BTC/USDT"]["candles"]
@@ -160,10 +200,12 @@ def create_app(state: StateManager):
 
                 # 3. Portfolio & Metrics
                 # Get ensemble sentiment for BTC
-                ens_sig_raw = await state.get("ensemble_signal:BTC/USDT")
+                ens_sig = await state.get("ml_signal:BTC/USDT")
                 sentiment = "NEUTRAL"
-                if ens_sig_raw:
-                    ens_sig = json.loads(ens_sig_raw)
+                if ens_sig:
+                    if isinstance(ens_sig, str):
+                        try: ens_sig = json.loads(ens_sig)
+                        except: pass
                     raw_sentiment = ens_sig.get('signal', 'NEUTRAL')
                     if raw_sentiment == 'BUY': sentiment = 'BULL'
                     elif raw_sentiment == 'SELL': sentiment = 'BEAR'
@@ -191,6 +233,27 @@ def create_app(state: StateManager):
                 # 6. Signals for Chart (Entries/Exits)
                 signals_raw = await state.redis.lrange('signals:history', 0, 49)
                 payload["data"]["signals"] = [json.loads(s) for s in signals_raw]
+                
+                # 7. METRICS_UPDATE for Live Dashboard
+                await websocket.send_json({
+                    "type": "METRICS_UPDATE",
+                    "data": {
+                        "account_value": payload["data"]["portfolio"]["value"],
+                        "daily_pnl": float(await state.get_float('pnl:24h') or 0.0),
+                        "win_rate": payload["data"]["portfolio"]["win_rate"],
+                        "drawdown": payload["data"]["portfolio"]["drawdown"],
+                        "phase": rollout_phase
+                    }
+                })
+                
+                # 8. Latest Trade Executed
+                latest_trade = await state.redis.lrange('trade:history', 0, 0)
+                if latest_trade:
+                    await websocket.send_json({
+                        "type": "TRADE_EXECUTED",
+                        "timestamp": datetime.now().isoformat(),
+                        "data": json.loads(latest_trade[0])
+                    })
 
                 await websocket.send_json(payload)
                 await asyncio.sleep(2)

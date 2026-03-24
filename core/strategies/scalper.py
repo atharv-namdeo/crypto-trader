@@ -1,8 +1,10 @@
 import asyncio
+import os
 import logging
 import time
 import json
 import traceback
+from config import SYMBOLS, CAPITAL
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
 from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
@@ -21,8 +23,9 @@ class ScalperStrategy:
         self.state = state
         self.pnl = pnl_tracker
         self.capital = capital
-        self.symbols = ["BTC/USDT", "ETH/USDT"]
+        self.symbols = SYMBOLS
         self.running = False
+        self.mode = os.getenv('AI_ENSEMBLE_MODE', 'long_only')
 
     async def run_loop(self):
         self.running = True
@@ -98,6 +101,12 @@ class ScalperStrategy:
 
             fuzzy = FuzzyEngine()
             
+            # Fetch ML Filter (from central main.py loop)
+            ml_pred = await self.state.get(f"ml_signal:{symbol}")
+            ml_dir = 'HOLD'
+            if ml_pred:
+                ml_dir = ml_pred.get('signal', 'HOLD')
+                ml_conf = ml_pred.get('confidence', 0.5)
             indicators = {
                 'rsi':          rsi_1m,
                 'price':        price,
@@ -127,9 +136,11 @@ class ScalperStrategy:
             
             log.info(f"🧠 [SCALPER FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} (thresh={threshold})")
             
-            if action == 'BUY':
+            if action == 'BUY' and ml_dir == 'BUY':
+                log.info(f"⚡ [SCALPER] Entry LONG {symbol} | Fuzzy:{conviction:.2f} | ML:{ml_conf:.2%}")
                 await self._open_position(symbol, 'LONG', price, conviction)
-            elif action == 'SELL':
+            elif action == 'SELL' and ml_dir == 'SELL' and self.mode != 'long_only':
+                log.info(f"⚡ [SCALPER] Entry SHORT {symbol} | Fuzzy:{conviction:.2f} | ML:{ml_conf:.2%}")
                 await self._open_position(symbol, 'SHORT', price, conviction)
 
     async def _open_position(self, symbol: str, side: str, price: float, conviction: float):

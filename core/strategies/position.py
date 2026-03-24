@@ -7,6 +7,7 @@ from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
 from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
 from core.fuzzy_engine import FuzzyEngine
+from config import SYMBOLS
 
 log = logging.getLogger("PositionTrader")
 
@@ -21,7 +22,7 @@ class PositionStrategy:
         self.state = state
         self.pnl = pnl_tracker
         self.capital = capital
-        self.symbols = ["BTC/USDT"] # Single specific concentration
+        self.symbols = SYMBOLS
         self.running = False
 
     async def run_loop(self):
@@ -145,6 +146,12 @@ class PositionStrategy:
             rsi_4h_val = safe_last(rsi_series_4h)
             fuzzy = FuzzyEngine()
             
+            # Fetch ML Filter (from central main.py loop)
+            ml_pred = await self.state.get(f"ml_signal:{symbol}")
+            ml_dir = 'HOLD'
+            if ml_pred:
+                ml_dir = ml_pred.get('signal', 'HOLD')
+                ml_conf = ml_pred.get('confidence', 0.5)
             indicators = {
                 'rsi':          rsi_4h_val,
                 'price':        price,
@@ -174,9 +181,11 @@ class PositionStrategy:
             
             log.info(f"🧠 [POSITION FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} (thresh={threshold})")
             
-            if action == 'BUY' and structure == 'BULL':
+            if action == 'BUY' and structure == 'BULL' and ml_dir == 'BUY':
+                log.info(f"🏔️ [POSITION] Entry LONG {symbol} | Fuzzy:{conviction:.2f} | ML:{ml_conf:.2%}")
                 await self._open_position(symbol, 'LONG', price, atr_4h, conviction)
-            elif action == 'SELL' and structure == 'BEAR':
+            elif action == 'SELL' and structure == 'BEAR' and ml_dir == 'SELL':
+                log.info(f"🏔️ [POSITION] Entry SHORT {symbol} | Fuzzy:{conviction:.2f} | ML:{ml_conf:.2%}")
                 await self._open_position(symbol, 'SHORT', price, atr_4h, conviction)
 
     async def _open_position(self, symbol: str, side: str, price: float, atr: float, conviction: float):

@@ -7,6 +7,7 @@ from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
 from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
 from core.fuzzy_engine import FuzzyEngine
+from config import SYMBOLS
 
 log = logging.getLogger("Swing")
 
@@ -21,7 +22,7 @@ class SwingStrategy:
         self.state = state
         self.pnl = pnl_tracker
         self.capital = capital
-        self.symbols = ["BTC/USDT", "ETH/USDT"]
+        self.symbols = SYMBOLS
         self.running = False
 
     async def run_loop(self):
@@ -110,6 +111,12 @@ class SwingStrategy:
 
             fuzzy = FuzzyEngine()
             
+            # Fetch ML Filter (from central main.py loop)
+            ml_pred = await self.state.get(f"ml_signal:{symbol}")
+            ml_dir = 'HOLD'
+            if ml_pred:
+                ml_dir = ml_pred.get('signal', 'HOLD')
+                ml_conf = ml_pred.get('confidence', 0.5)
             indicators = {
                 'rsi':          rsi_val_1h,
                 'price':        price,
@@ -139,9 +146,11 @@ class SwingStrategy:
             
             log.info(f"🧠 [SWING FUZZY] {symbol} long={long_score:.3f} short={short_score:.3f} → {action} (thresh={threshold})")
             
-            if action == 'BUY' and trend_up:
+            if action == 'BUY' and trend_up and ml_dir == 'BUY':
+                log.info(f"🌊 [SWING] Entry LONG {symbol} | Fuzzy:{conviction:.2f} | ML:{ml_conf:.2%}")
                 await self._open_position(symbol, 'LONG', price, atr_1h, conviction)
-            elif action == 'SELL' and not trend_up:
+            elif action == 'SELL' and not trend_up and ml_dir == 'SELL':
+                log.info(f"🌊 [SWING] Entry SHORT {symbol} | Fuzzy:{conviction:.2f} | ML:{ml_conf:.2%}")
                 await self._open_position(symbol, 'SHORT', price, atr_1h, conviction)
 
     async def _open_position(self, symbol: str, side: str, price: float, atr: float, conviction: float):

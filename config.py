@@ -10,10 +10,14 @@ CAPITAL = float(os.getenv('CAPITAL', '1000'))
 INR_RATE = 84.5 # Fixed conversion rate for display
 
 # Symbols to trade (USDS-M Futures)
-SYMBOLS = ['BTC/USDT', 'ETH/USDT']
+SYMBOLS = [
+    'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT',
+    'MATIC/USDT', 'AVAX/USDT', 'LINK/USDT', 'UNI/USDT', 'DOT/USDT',
+    'LTC/USDT', 'SHIB/USDT', 'TRX/USDT', 'BCH/USDT', 'NEAR/USDT'
+]
 
 # Timeframes for analysis
-TIMEFRAMES = ['5m', '15m', '1h']
+TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '2h', '4h']
 MACRO_TIMEFRAME = '4h'
 
 # Redis

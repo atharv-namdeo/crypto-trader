@@ -12,6 +12,9 @@ import SettingsPanel from './components/SettingsPanel';
 import TradeHistory from './components/TradeHistory';
 import SignalHeatmap from './components/SignalHeatmap';
 import TradingChart from './components/TradingChart';
+import MLSignalPanel from './components/MLSignalPanel';
+import MultiAssetMonitor from './components/MultiAssetMonitor';
+import LiveTradingDashboard from './pages/LiveTradingDashboard';
 
 const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
 // Fallback logic: if VITE_WS_URL is missing, derive it from API_BASE
@@ -29,6 +32,7 @@ const App = () => {
   const [chartCandles, setChartCandles] = useState([]);
   const [wsStatus, setWsStatus] = useState('OFFLINE');
   const [errorCount, setErrorCount] = useState(0);
+  const [ws, setWs] = useState(null);
   const [data, setData] = useState({
     market: {},
     strategies: {},
@@ -45,12 +49,18 @@ const App = () => {
   });
 
   const fetchCandles = async (tf) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await fetch(`${API_BASE}/candles?symbol=BTC/USDT&interval=${tf}&limit=200`);
+      const res = await fetch(`${API_BASE}/candles?symbol=BTC/USDT&interval=${tf}&limit=200`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
       const candles = await res.json();
       setChartCandles(candles);
     } catch (e) {
-      console.error('Fetch candles error:', e);
+      if (e.name === 'AbortError') console.warn('Fetch candles timed out');
+      else console.error('Fetch candles error:', e);
     }
   };
 
@@ -59,50 +69,66 @@ const App = () => {
   }, [timeframe]);
 
   useEffect(() => {
-    const ws = new WebSocket(WS_BASE);
-    ws.onopen = () => {
-      console.log('✅ WebSocket Connected');
-      setWsStatus('CONNECTED');
-      setErrorCount(0);
-    };
-    ws.onerror = (e) => {
-      console.error('❌ WebSocket Error:', e);
-      setWsStatus('ERROR');
-      setErrorCount(prev => prev + 1);
-    };
-    ws.onclose = () => {
-      console.warn('⚠️ WebSocket Closed');
-      setWsStatus('OFFLINE');
-    };
-    
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'info') {
-        console.info('📬 Backend Info:', msg.data);
-        if (msg.data.includes('Redis')) setWsStatus('WAITING_REDIS');
-      } else if (msg.type === 'engine_update') {
-        setWsStatus('LIVE');
-        console.log('📬 Update Received:', msg.data);
-        setData(prev => {
-          const newData = { ...prev, ...msg.data };
-          // Map backend 'metrics' if present into portfolio for consistency
-          if (msg.data.portfolio && typeof msg.data.portfolio === 'object') {
-             newData.portfolio = { ...newData.portfolio, ...msg.data.portfolio };
-          }
-          return newData;
-        });
+    let socket;
+    let reconnectTimer;
 
-        // Update chart with latest candle if it matches timeframe
-        if (msg.data.latest_candles && msg.data.latest_candles[timeframe]) {
-          const newCandle = msg.data.latest_candles[timeframe][0];
-          if (newCandle) {
-            setChartCandles([newCandle]);
+    const connect = () => {
+      socket = new WebSocket(WS_BASE);
+      setWs(socket);
+      
+      socket.onopen = () => {
+        console.log('✅ WebSocket Connected');
+        setWsStatus('CONNECTED');
+        setErrorCount(0);
+      };
+
+      socket.onerror = (e) => {
+        console.error('❌ WebSocket Error:', e);
+        setWsStatus('ERROR');
+        setErrorCount(prev => prev + 1);
+      };
+
+      socket.onclose = () => {
+        console.warn('⚠️ WebSocket Closed. Reconnecting in 3s...');
+        setWsStatus('OFFLINE');
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+      
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'info') {
+            console.info('📬 Backend Info:', msg.data);
+            if (msg.data.includes('Redis')) setWsStatus('WAITING_REDIS');
+          } else if (msg.type === 'engine_update') {
+            setWsStatus('LIVE');
+            setData(prev => {
+              const newData = { ...prev, ...msg.data };
+              if (msg.data.portfolio && typeof msg.data.portfolio === 'object') {
+                 newData.portfolio = { ...prev.portfolio, ...msg.data.portfolio };
+              }
+              return newData;
+            });
+
+            if (msg.data.latest_candles && msg.data.latest_candles[timeframe]) {
+              const newCandle = msg.data.latest_candles[timeframe][0];
+              if (newCandle) {
+                setChartCandles([newCandle]);
+              }
+            }
           }
+        } catch (je) {
+          console.error('Unsafe JSON parsing detected from WebSocket:', je);
         }
-      }
+      };
     };
-    return () => ws.close();
-  }, []);
+
+    connect();
+    return () => {
+      if (socket) socket.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, [timeframe]);
 
   const handleAction = async (type, payload) => {
     console.log('Action:', type, payload);
@@ -132,7 +158,9 @@ const App = () => {
         <div className="p-4 space-y-6">
           {activeTab === 'dashboard' && (
             <>
-              <div className="flex justify-between items-center mb-4">
+              <MultiAssetMonitor marketData={data.market} signals={data.signals} />
+              
+              <div className="flex justify-between items-center mb-4 mt-6">
                 <StrategyCards stats={data.strategies} />
                 <div className="flex gap-2 bg-bg-secondary p-1 rounded-lg border border-border/50">
                   {['1m', '5m', '15m', '1h', '4h', '1d'].map(tf => (
@@ -150,19 +178,19 @@ const App = () => {
               </div>
 
               <div className="flex items-center gap-4">
-            <div className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-              wsStatus === 'LIVE' ? 'bg-green/10 text-green border-green/20' :
-              wsStatus === 'CONNECTED' ? 'bg-blue/10 text-blue border-blue/20' :
-              wsStatus === 'WAITING_REDIS' ? 'bg-yellow/10 text-yellow border-yellow/20' :
-              'bg-red/10 text-red border-red/20'
-            }`}>
-              {wsStatus} {errorCount > 0 && `(${errorCount})`}
-            </div>
-            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-black text-text-muted">
-              <span className="w-1.5 h-1.5 bg-accent rounded-full animate-ping"></span>
-              Live WebSocket Engine V6.5
-            </span>
-          </div>
+                <div className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                  wsStatus === 'LIVE' ? 'bg-green/10 text-green border-green/20' :
+                  wsStatus === 'CONNECTED' ? 'bg-blue/10 text-blue border-blue/20' :
+                  wsStatus === 'WAITING_REDIS' ? 'bg-yellow/10 text-yellow border-yellow/20' :
+                  'bg-red/10 text-red border-red/20'
+                }`}>
+                  {wsStatus} {errorCount > 0 && `(${errorCount})`}
+                </div>
+                <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-black text-text-muted">
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full animate-ping"></span>
+                  Live WebSocket Engine V6.5
+                </span>
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                   <div className="h-[450px]">
@@ -176,6 +204,7 @@ const App = () => {
                   <OpenPositions positions={data.positions} onAction={handleAction} />
                 </div>
                 <div className="space-y-6">
+                  <MLSignalPanel ws={ws} />
                   <FuzzyRadar fuzzyScores={data.market['BTC/USDT']?.fuzzy || data.market['BTC/USDT'] || {}} />
                   <EquityCurve history={data.equity_history} />
                   <SignalHeatmap data={[]} />
@@ -183,6 +212,8 @@ const App = () => {
               </div>
             </>
           )}
+
+          {activeTab === 'live' && <LiveTradingDashboard ws={ws} />}
 
           {activeTab === 'trading' && (
             <div className="space-y-6">

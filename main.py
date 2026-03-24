@@ -1,4 +1,5 @@
 import asyncio
+import time
 import logging
 import signal
 import json
@@ -7,10 +8,13 @@ import os
 from datetime import datetime
 from contextlib import suppress
 
-from config import SYMBOLS, CAPITAL
+from config import SYMBOLS, CAPITAL, get_exchange
 from core.state_manager import StateManager
+from reporting.report_scheduler import ReportScheduler
+from api.metrics import exporter as prometheus_exporter
 from feeds.websocket_manager import WebSocketManager
-from feeds.candle_feed import CandleFeedManager
+from core.multi_asset_data_manager import MultiAssetDataManager
+from core.portfolio_risk_manager import PortfolioRiskManager
 from core.feature_engine import FeatureEngine
 from api.app import create_app
 
@@ -23,9 +27,18 @@ from core.strategies.scalper import ScalperStrategy
 from core.strategies.swing import SwingStrategy
 from core.strategies.position import PositionStrategy
 from core.strategies.ai_ensemble_strategy import AIEnsembleStrategy
+from core.strategies.mean_reversion import MeanReversionStrategy
+from core.strategies.ensemble_voting import EnsembleVotingStrategy
 from ml.anomaly_detector import AnomalyDetector
 from ml.boruta_selector import BorutaSelector
 from ml.rf_gb_predictor import RFGBPredictor
+from ml.parallel_predictor import ParallelMLPredictor
+from ml.performance_monitor import PerformanceMonitor
+from ml.signal_quality_tracker import SignalQualityTracker
+from ml.auto_tuner import StrategyAutoTuner
+from execution.pre_launch_validator import PreLaunchValidator
+from execution.graduated_rollout import GraduatedRollout
+from execution.alert_system import AlertSystem, monitor_critical_metrics
 
 from core.telegram_notifier import TelegramNotifier
 telegram = TelegramNotifier()
@@ -64,27 +77,36 @@ async def start_api_server(state: StateManager):
     await server.serve()
 
 async def sync_dashboard(state: StateManager):
-    """Sync live Binance portfolio to Firebase every 60s."""
+    """Sync live Binance portfolio to Firebase every 60s with retry logic."""
     from utils.firebase_client import log_equity, log_balance
     while True:
         try:
             acc = await state.get('binance:account')
+            total_equity = float(CAPITAL)
+            assets = [{"asset": "USDT", "balance": total_equity}]
+            
             if acc:
                 total_equity = float(acc.get('totalWalletBalance', 0)) + float(acc.get('totalUnrealizedProfit', 0))
-                assets = []
+                found_assets = []
                 for a in acc.get('assets', []):
                     bal = float(a.get('walletBalance', 0))
                     if bal > 0:
-                        assets.append({"asset": a['asset'], "balance": bal})
-                if not assets:
-                    assets = [{"asset": "USDT", "balance": total_equity}]
-                log_equity(total_equity)
-                log_balance(assets)
-            else:
-                log_equity(float(CAPITAL))
-                log_balance([{"asset": "USDT", "balance": float(CAPITAL)}])
+                        found_assets.append({"asset": a['asset'], "balance": bal})
+                if found_assets:
+                    assets = found_assets
+
+            # Protective wrappers for Firebase calls
+            try: log_equity(total_equity)
+            except Exception as fe: log.error(f"Firebase Equity Log Error: {fe}")
+            
+            try: log_balance(assets)
+            except Exception as fb: log.error(f"Firebase Balance Log Error: {fb}")
+            
         except Exception as e:
             log.warning(f"Could not sync portfolio to dashboard: {e}")
+            await asyncio.sleep(10) # Back off a bit on error
+            continue
+            
         await asyncio.sleep(60)
 
 async def daily_summary_loop(state: StateManager):
@@ -122,17 +144,73 @@ async def daily_summary_loop(state: StateManager):
             best = max(pnls) if pnls else 0
             worst = min(pnls) if pnls else 0
             
-            await telegram.daily_summary(
-                portfolio, daily_pnl, len(today_trades),
-                win_rate, best, worst,
-                scalper_pnl, swing_pnl, position_pnl
-            )
+            # Wrap Telegram call in try-except to prevent bot crash
+            try:
+                await telegram.daily_summary(
+                    portfolio, daily_pnl, len(today_trades),
+                    win_rate, best, worst,
+                    scalper_pnl, swing_pnl, position_pnl
+                )
+            except Exception as te:
+                log.error(f"Telegram Daily Summary Error: {te}")
             
             # Reset 24h PnL counter
             await state.redis.set('pnl:24h', 0)
         except Exception as e:
             log.error(f"Daily summary loop error: {e}")
             await asyncio.sleep(60)
+
+async def ml_engine_loop(state: StateManager, ml_predictor: ParallelMLPredictor, perf_monitor: PerformanceMonitor, signal_tracker: SignalQualityTracker):
+    """
+    Main ML engine loop - updates ensemble predictions in Redis every 60s.
+    Also tracks performance latency and signal quality.
+    """
+    log.info("🧠 ML Engine Loop Started (with Monitoring)")
+    from config import SYMBOLS
+    while True:
+        try:
+            start_total = time.time()
+            for symbol in SYMBOLS:
+                # Get latest 1h candle data for features
+                df = await state.get_df(f"ohlcv:1h:{symbol}", n=100)
+                if df is None or df.empty:
+                    continue
+                
+                price = float(df['close'].iloc[-1])
+                features = {
+                    'open': float(df['open'].iloc[-1]),
+                    'high': float(df['high'].iloc[-1]),
+                    'low': float(df['low'].iloc[-1]),
+                    'close': price,
+                    'volume': float(df['volume'].iloc[-1]),
+                }
+                
+                # Run parallel prediction and track latency
+                start_pred = time.time()
+                prediction = await ml_predictor.predict_all(features, symbol)
+                latency_ms = (time.time() - start_pred) * 1000
+                perf_monitor.record_latency('ensemble', latency_ms)
+
+                # Store in Redis for strategies to consume
+                await state.set(f"ml_signal:{symbol}", prediction)
+                
+                # Record for quality tracking (1h, 4h, 1d evaluation)
+                await signal_tracker.record_signal(
+                    symbol, 
+                    prediction['signal'], 
+                    prediction['confidence'], 
+                    price, 
+                    time.time()
+                )
+                
+                log.info(f"🧠 [{symbol}] Ensemble: {prediction['signal']} (Conf: {prediction['confidence']:.2%}) | Latency: {latency_ms:.1f}ms")
+            
+            # Record total loop latency
+            perf_monitor.record_latency('total_loop', (time.time() - start_total) * 1000)
+                
+        except Exception as e:
+            log.error(f"ML Engine Error: {e}")
+        await asyncio.sleep(60)
 
 async def main():
     # 3. Connect to State Manager (Redis)
@@ -145,6 +223,21 @@ async def main():
     
     # Verify Telegram Connection
     await telegram.verify_connection()
+
+    # --- PHASE 7: PRE-LAUNCH VALIDATION ---
+    is_live = os.getenv('ENABLE_LIVE_TRADING', 'false').lower() == 'true'
+    if is_live:
+        log.warning("🚨 LIVE TRADING MODE ENABLED")
+        validator = PreLaunchValidator(state)
+        if not await validator.run_full_validation():
+            log.error("❌ PRE-LAUNCH VALIDATION FAILED - CRITICAL ERRORS DETECTED")
+            validator.print_validation_report()
+            log.error("Fix the above issues before starting live trading. Exiting.")
+            return
+        validator.print_validation_report()
+        log.info("✅ ALL PRE-LAUNCH CHECKS PASSED - STARTING LIVE TRADING")
+    else:
+        log.info("🧪 Running in PAPER TRADING mode")
 
     # 2. Setup Logging
     logging.basicConfig(level=logging.INFO, format='%(name)s: %(message)s')
@@ -166,25 +259,49 @@ async def main():
         if await state.get(f"settings:{k}") is None:
             await state.set(f"settings:{k}", v)
 
-    # 4.     # 4. Initialize Data Sources & Shared State
+    # 4. Initialize Data Sources & Shared State
     ws_feed     = WebSocketManager(SYMBOLS, state)
-    candle_feed = CandleFeedManager(SYMBOLS, ["1m", "5m", "15m", "1h", "4h", "1d"], state)
+    # CandleFeedManager replaced by MultiAssetDataManager in Phase 8
     features    = FeatureEngine(SYMBOLS, state)
     risk_manager  = RiskManager(state)
+    portfolio_risk = PortfolioRiskManager(risk_manager)
     risk_guardian = RiskGuardian(state)
-    order_engine  = OrderEngine(state)
+    order_engine  = OrderEngine(state, portfolio_risk=portfolio_risk)
+    
+    # 4.1 Initialize Multi-Asset Data Manager
+    exchange = get_exchange(use_testnet=True)
+    data_manager = MultiAssetDataManager(exchange, state)
+    
     pnl_tracker = PnLTracker(state)
+    ml_predictor = ParallelMLPredictor(state)
+    perf_monitor = PerformanceMonitor()
+    signal_tracker = SignalQualityTracker(state)
+    
+    # --- PHASE 7: EXECUTION TOOLS ---
+    alert_system = AlertSystem(state)
+    rollout = GraduatedRollout(state, start_capital=float(CAPITAL))
+    auto_tuner = StrategyAutoTuner(state)
+
+    # --- PHASE 9: MONITORING & REPORTING ---
+    report_scheduler = ReportScheduler(state)
+    report_scheduler.start()
 
     # --- START API IMMEDIATELY FOR HEALTH CHECKS ---
     api_task = asyncio.create_task(start_api_server(state))
     # Give API a moment to bind
     await asyncio.sleep(1)
 
-    # 5. Init Parallel Strategies
-    scalper  = ScalperStrategy(state, pnl_tracker, capital=200.0)
-    swing    = SwingStrategy(state, pnl_tracker, capital=400.0)
-    position = PositionStrategy(state, pnl_tracker, capital=400.0)
-    ai_ensemble = AIEnsembleStrategy(state, pnl_tracker, capital=200.0)
+    # 5. Init Parallel Strategies (Using Graduated Rollout)
+    initial_cap = await rollout.get_position_size()
+    strat_cap = initial_cap / 6
+    log.info(f"💰 Initial Capital Allocation (Phase: {rollout.current_phase}): ${initial_cap:.2f} total (${strat_cap:.2f}/strategy)")
+    
+    scalper  = ScalperStrategy(state, pnl_tracker, capital=strat_cap)
+    swing    = SwingStrategy(state, pnl_tracker, capital=strat_cap)
+    position = PositionStrategy(state, pnl_tracker, capital=strat_cap)
+    ai_ensemble = AIEnsembleStrategy(state, pnl_tracker, capital=strat_cap)
+    mean_revert = MeanReversionStrategy(state, pnl_tracker, capital=strat_cap)
+    ensemble_vote = EnsembleVotingStrategy(state, pnl_tracker, capital=strat_cap)
 
     # 5.1 Startup Checks (Paper 1 & 4) - Wrapped in task to prevent blocking
     async def run_startup_checks():
@@ -216,18 +333,32 @@ async def main():
     # 6. Create Coroutines
     tasks = [
         api_task,
-        asyncio.create_task(sync_dashboard(state)),
-        asyncio.create_task(risk_manager.run_loop(interval=1)),
-        asyncio.create_task(risk_guardian.run_loop(interval=60)),
-        asyncio.create_task(order_engine.run_loop(interval=1)),
-        asyncio.create_task(ws_feed.run_forever()),
-        asyncio.create_task(candle_feed.run_forever()),
-        asyncio.create_task(features.run_forever(interval_s=1)),
-        asyncio.create_task(scalper.run_loop()),
-        asyncio.create_task(swing.run_loop()),
-        asyncio.create_task(position.run_loop()),
-        asyncio.create_task(ai_ensemble.run_loop()),
-        asyncio.create_task(daily_summary_loop(state)),
+        asyncio.create_task(sync_dashboard(state), name="DASH_SYNC"),
+        asyncio.create_task(risk_manager.run_loop(interval=1), name="RISK_MGR"),
+        asyncio.create_task(risk_guardian.run_loop(interval=60), name="RISK_GTD"),
+        asyncio.create_task(order_engine.run_loop(interval=1), name="ORDER_ENG"),
+        asyncio.create_task(ws_feed.run_forever(), name="WS_FEED"),
+        asyncio.create_task(data_manager.run_loop(interval_seconds=60), name="DATA_MGR"),
+        asyncio.create_task(features.run_forever(interval_s=1), name="FEAT_ENG"),
+        
+        # Strategy Tasks
+        asyncio.create_task(scalper.run_loop(), name="SCALPER"),
+        asyncio.create_task(swing.run_loop(), name="SWING"),
+        asyncio.create_task(position.run_loop(), name="POSITION"),
+        asyncio.create_task(ai_ensemble.run_loop(), name="AI_ENSEMBLE"),
+        asyncio.create_task(mean_revert.run(), name="MEAN_REVERT"),
+        asyncio.create_task(ensemble_vote.run(), name="ENSEMBLE_VOTE"),
+        asyncio.create_task(ml_engine_loop(state, ml_predictor, perf_monitor, signal_tracker), name="ML_ENGINE"),
+        asyncio.create_task(perf_monitor.log_stats_periodically(300), name="PERF_STATS"),
+        
+        asyncio.create_task(daily_summary_loop(state), name="DAILY_SUM"),
+        
+        # Phase 7 Monitoring & Tuning
+        asyncio.create_task(monitor_critical_metrics(state, alert_system), name="ALERT_MONITOR"),
+        asyncio.create_task(auto_tuner.run_periodic_tuning(SYMBOLS), name="AUTO_TUNER"),
+        
+        # Phase 9 Prometheus Update
+        asyncio.create_task(prometheus_exporter.update_loop(state), name="PROMETHEUS_METRICS")
     ]
 
     # Send startup notification
@@ -236,13 +367,35 @@ async def main():
 
     # Graceful shutdown handler
     loop = asyncio.get_event_loop()
-    components = [ws_feed, candle_feed, features, risk_guardian, order_engine, scalper, swing, position]
+    components = [ws_feed, data_manager, features, risk_guardian, order_engine, scalper, swing, position]
     for sig in (signal.SIGINT, signal.SIGTERM):
         with suppress(NotImplementedError):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(tasks, *components)))
 
     log.info("✅ All systems initialized. Gathering tasks...")
-    await asyncio.gather(*tasks)
+    
+    # Task Watchdog: Ensure critical tasks are monitored
+    while True:
+        try:
+            # Re-gather tasks periodically or wait for completion with exception handling
+            done, pending = await asyncio.wait(
+                tasks, 
+                return_when=asyncio.FIRST_EXCEPTION
+            )
+            
+            for task in done:
+                if task.exception():
+                    log.critical(f"🚨 CRITICAL TASK FAILED: {task.get_name() or task} | Exception: {task.exception()}")
+                    # Optionally restart or handle specific failures
+            
+            if not pending: break # All tasks finished? (Unexpected in a bot)
+            await asyncio.sleep(5)
+            
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            log.error(f"Task monitoring error: {e}")
+            await asyncio.sleep(5)
 
 async def shutdown(tasks, *components):
     log.warning("🛑 SHUTTING DOWN ENGINE...")

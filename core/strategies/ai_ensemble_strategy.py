@@ -14,9 +14,11 @@ import os
 import traceback
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
-from strategies.utils import compute_rsi, compute_atr, compute_adx, compute_ultosc
+from strategies.utils import compute_rsi, compute_atr, compute_adx, compute_ultosc, compute_ema
 from ml.ensemble_model import EnsembleModel
 from ml.anomaly_detector import AnomalyDetector
+from core.risk import RiskManager
+from config import SYMBOLS
 
 log = logging.getLogger("AIEnsemble")
 
@@ -25,10 +27,11 @@ class AIEnsembleStrategy:
         self.state = state
         self.pnl = pnl_tracker
         self.capital = capital
-        self.symbols = ["BTC/USDT", "ETH/USDT"]
+        self.symbols = SYMBOLS
         self.running = False
-        self.ensemble = EnsembleModel()
-        self.anomaly_detector = AnomalyDetector(threshold=1.5) # Paper 1: Extreme anomaly gating
+        # self.ensemble = EnsembleModel() # Replaced by ParallelMLPredictor in main.py
+        self.anomaly_detector = AnomalyDetector(threshold=1.5)
+        self.risk = RiskManager(state)
         self.mode = os.getenv('AI_ENSEMBLE_MODE', 'long_only')
         self.stability_score = self._load_stability_score()
 
@@ -76,12 +79,20 @@ class AIEnsembleStrategy:
             log.warning(f"⚠️ [AI ENSEMBLE] Skipping {symbol} due to Extreme Anomaly (Z={anomaly['z_score']:.2f})")
             return
 
-        # 3. Model Prediction (Paper 5)
-        model_res = self.ensemble.predict(feature_dict)
-        await self.state.redis.set(f"ensemble_signal:{symbol}", json.dumps(model_res))
+        # 3. Centralized Model Prediction (from main.py ml_engine_loop)
+        prediction = await self.state.get(f"ml_signal:{symbol}")
+        if not prediction:
+            log.warning(f"⚠️ [AI ENSEMBLE] No fresh ML signal for {symbol}")
+            return
+
+        # Score is normalized ensemble value (-1 to 1)
+        # Assuming prediction['ensemble_val'] is 0 to 1, shifted to -1 to 1
+        score = (prediction['ensemble_val'] - 0.5) * 2
+        confidence = prediction.get('confidence', 0.5)
+
         ml_signal = 0
-        if model_res['signal'] == 'BUY': ml_signal = 1
-        elif model_res['signal'] == 'SELL': ml_signal = -1
+        if prediction['signal'] == 'BUY': ml_signal = 1
+        elif prediction['signal'] == 'SELL': ml_signal = -1
 
         # 4. Confirmation Indicators (Paper 5)
         # RSI
@@ -121,44 +132,93 @@ class AIEnsembleStrategy:
         
         log.info(f"📊 [AI ENSEMBLE] {symbol} Score: {score:.2f} (RSI:{rsi_sig} ULTOSC:{ultosc_sig} MACD:{macd_sig} Vol:{vol_sig} ML:{ml_signal})")
 
+        # 4. Indicators (Simplified for signal generation)
+        atr = float(compute_atr(df_1h, 14).iloc[-1])
+        
+        # 5. Custom Technical Filters (The "Custom" Layer)
+        ema20 = compute_ema(df_1h, 20).iloc[-1]
+        ema50 = compute_ema(df_1h, 50).iloc[-1]
+        rsi = compute_rsi(df_1h, 14).iloc[-1]
+        
+        trend_up = ema20 > ema50
+        trend_down = ema20 < ema50
+        
+        # Volatility Gate: ATR / Price must be > 0.5% (Avoid dead markets)
+        volatility_pct = (atr / price) * 100
+        if volatility_pct < 0.5:
+            log.debug(f"Skipping {symbol}: Low volatility ({volatility_pct:.2f}%)")
+            return
+
         # 6. Trade Logic
         pos = await self.state.get(f"ai_ensemble:pos:{symbol}")
-        
+
         if pos:
-            # Simple ATR Stop/TP
+            # Update Trailing Stop
             entry = pos['entry']
             side = pos['side']
-            atr = float(compute_atr(df_1h, 14).iloc[-1])
+            high_low = pos.get('high_low', price)
             
+            # Update extreme price
+            if side == 'LONG': high_low = max(high_low, price)
+            else: high_low = min(high_low, price)
+            pos['high_low'] = high_low
+            
+            # Check Exit
+            stop = pos['sl']
+            tp = pos['tp']
+            
+            # Dynamic Trailing SL after 1.5% profit
             pnl_pct = (price - entry) / entry if side == 'LONG' else (entry - price) / entry
-            
+            if pnl_pct > 0.015:
+                stop = self.risk.check_trailing_stop(side, price, high_low, atr)
+                pos['sl'] = stop
+
             exit_reason = None
             if side == 'LONG':
-                if price <= entry - 1.5 * atr: exit_reason = "STOP_LOSS"
-                elif price >= entry + 3.0 * atr: exit_reason = "TAKE_PROFIT"
-                elif score < -0.3: exit_reason = "SIGNAL_REVERSAL"
+                if price <= stop: exit_reason = "STOP_LOSS"
+                elif price >= tp: exit_reason = "TAKE_PROFIT"
+                elif score < -0.4: exit_reason = "SIGNAL_REVERSAL"
             else:
-                if price >= entry + 1.5 * atr: exit_reason = "STOP_LOSS"
-                elif price <= entry - 3.0 * atr: exit_reason = "TAKE_PROFIT"
-                elif score > 0.3: exit_reason = "SIGNAL_REVERSAL"
+                if price >= stop: exit_reason = "STOP_LOSS"
+                elif price <= tp: exit_reason = "TAKE_PROFIT"
+                elif score > 0.4: exit_reason = "SIGNAL_REVERSAL"
                 
             if exit_reason:
                 await self._close_position(symbol, pos, price, exit_reason)
+            else:
+                # Save updated high_low and SL
+                await self.state.set(f"ai_ensemble:pos:{symbol}", pos)
         else:
-            if score > 0.5:
-                # BUY
-                await self._open_position(symbol, 'LONG', price, model_res['confidence'])
-            elif score < -0.5 and self.mode == 'long_short':
-                # SELL
-                await self._open_position(symbol, 'SHORT', price, model_res['confidence'])
+            if abs(score) > 0.5:
+                side = 'LONG' if score > 0.5 else 'SHORT'
+                
+                # Apply custom filters
+                if side == 'LONG':
+                    if not trend_up: return # Trend Filter
+                    if rsi > 70: return # RSI Overbought Filter
+                else:
+                    if self.mode == 'long_only': return
+                    if not trend_down: return # Trend Filter
+                    if rsi < 30: return # RSI Oversold Filter
 
-    async def _open_position(self, symbol: str, side: str, price: float, confidence: float):
-        # Scale quantity based on stability score (GitHub Algo logic)
-        risk_multiplier = 0.5 + (self.stability_score * 0.5)  # Range 0.5 to 1.0
-        qty = (self.capital * 0.5 * risk_multiplier) / price
+                # Calculate SL/TP BEFORE entry
+                sl = self.risk.get_stop_loss(side, price, atr)
+                tp = self.risk.get_take_profit(side, price, atr)
+                
+                # Compute position size
+                size_data = self.risk.compute_position_size(self.capital, abs(score), atr, price)
+                qty = size_data['qty']
+                
+                if qty > 0 and self.risk.validate_trade(side, price, sl, tp, qty, self.capital):
+                    await self._open_position(symbol, side, price, sl, tp, qty, confidence)
+
+    async def _open_position(self, symbol: str, side: str, price: float, sl: float, tp: float, qty: float, confidence: float):
         pos = {
             'side': side,
             'entry': price,
+            'sl': sl,
+            'tp': tp,
+            'high_low': price,
             'qty': qty,
             'time': time.time(),
             'strategy': 'AI_ENSEMBLE'

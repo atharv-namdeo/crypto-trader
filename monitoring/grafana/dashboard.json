@@ -1,0 +1,23 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Crypto Trader - Global Overview",
+    "panels": [
+      {
+        "title": "Account Equity (USDT)",
+        "type": "graph",
+        "targets": [{ "expr": "trader_equity_usdt" }]
+      },
+      {
+        "title": "Daily P&L",
+        "type": "stat",
+        "targets": [{ "expr": "trader_daily_pnl_usdt" }]
+      },
+      {
+        "title": "ML Signal Accuracy",
+        "type": "gauge",
+        "targets": [{ "expr": "trader_ml_accuracy" }]
+      }
+    ]
+  }
+}

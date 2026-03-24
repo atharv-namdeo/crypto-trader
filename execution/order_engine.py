@@ -15,8 +15,9 @@ from config import SYMBOLS
 log = logging.getLogger("OrderEngine")
 
 class OrderEngine:
-    def __init__(self, state: StateManager):
+    def __init__(self, state: StateManager, portfolio_risk=None):
         self.state = state
+        self.portfolio_risk = portfolio_risk
         self.running = False
         
         self.dry_run = os.getenv('DRY_RUN', 'false').lower() == 'true'
@@ -95,60 +96,92 @@ class OrderEngine:
         market_sym = symbol.replace('/', '').upper()
         action = req.get('action')
         side = req.get('side')
-        qty = round(req.get('qty', 0), 5)
-        price = req.get('price', 0)
+        qty = float(req.get('qty', 0))
+        price = float(req.get('price', 0))
 
         if self.dry_run:
             log.info(f"📝 PAPER TRADE: {side} {market_sym} qty={qty}")
-            # Log signal even in dry run for dashboard visibility
-            try:
-                from datetime import datetime
-                signal = {
-                    'time': datetime.utcnow().timestamp(),
-                    'price': price,
-                    'type': side,
-                    'action': action,
-                    'strategy': req.get('strategy', 'UNKNOWN'),
-                    'pnl': 0
-                }
-                await self.state.redis.lpush('signals:history', json.dumps(signal))
-                await self.state.redis.ltrim('signals:history', 0, 99)
-            except: pass
+            await self._log_signal(price, side, action, req.get('strategy', 'AI'))
             return True
 
         try:
+            # 0. Validate and Round
+            valid, qty, price, sl, tp = self._validate_and_round(market_sym, side, qty, price, req.get('stop'), req.get('tp'))
+            if not valid:
+                log.error(f"❌ Order validation failed for {market_sym}")
+                return True # Toss invalid requests to avoid loop
+                
             if action == 'OPEN':
-                await self._execute_open(market_sym, side, qty, price, req.get('stop'), req.get('tp'))
-                # Log signal for chart
-                try:
-                    from datetime import datetime
-                    signal = {
-                        'time': datetime.utcnow().timestamp(),
-                        'price': price,
-                        'type': side,
-                        'action': 'OPEN',
-                        'strategy': req.get('strategy', 'UNKNOWN'),
-                        'pnl': 0
-                    }
-                    await self.state.redis.lpush('signals:history', json.dumps(signal))
-                    await self.state.redis.ltrim('signals:history', 0, 99)
-                except: pass
+                # --- PHASE 8: PORTFOLIO RISK GATING ---
+                if self.portfolio_risk:
+                    current_positions = await self.state.get_all_positions()
+                    if not await self.portfolio_risk.validate_portfolio_impact(symbol, qty * price, current_positions):
+                        log.warning(f"🛡️ Portfolio Risk rejection for {symbol}")
+                        return True # Drop restricted order
+
+                # Retry logic for network blips
+                for attempt in range(3):
+                    try:
+                        await self._execute_open(market_sym, side, qty, price, sl, tp, req.get('strategy', 'AI'))
+                        break
+                    except Exception as e:
+                        if attempt == 2: raise e
+                        await asyncio.sleep(2 ** attempt)
+                
+                # Signal logging...
+                await self._log_signal(price, side, 'OPEN', req.get('strategy', 'AI'))
             elif action == 'CLOSE':
                 await self._execute_close(market_sym, side, qty)
+                await self._log_signal(price, side, 'CLOSE', req.get('strategy', 'AI'))
             return True
-            
-        except BinanceAPIException as e:
-            log.error(f"[TESTNET ERROR] {e.message} — retrying in 10s")
-            return False
         except Exception as e:
-            log.error(f"[TESTNET ERROR] {e} — retrying in 10s")
+            log.error(f"🔥 Process Order Error: {e}")
             return False
 
-    async def _execute_open(self, symbol: str, side: str, qty: float, price: float, stop: float, tp: float):
+        try:
+            # Dynamic rounding based on symbol
+            if 'BTC' in symbol:
+                qty, price = round(qty, 3), round(price, 1)
+                sl, tp = round(sl or 0, 1), round(tp or 0, 1)
+                min_qty = 0.001
+            elif 'ETH' in symbol:
+                qty, price = round(qty, 2), round(price, 2)
+                sl, tp = round(sl or 0, 2), round(tp or 0, 2)
+                min_qty = 0.01
+            else:
+                # Generic for altcoins
+                qty, price = round(qty, 1), round(price, 4)
+                sl, tp = round(sl or 0, 4), round(tp or 0, 4)
+                min_qty = 0.1
+                
+            if qty < min_qty:
+                log.warning(f"⚠️ Qty {qty} too small for {symbol} (min {min_qty})")
+                return False, 0, 0, 0, 0
+            
+            return True, qty, price, sl, tp
+        except:
+            return False, 0, 0, 0, 0
+
+    async def _log_signal(self, price, side, action, strategy):
+        try:
+            from datetime import datetime
+            signal = {
+                'time': datetime.utcnow().timestamp(),
+                'price': price,
+                'type': side,
+                'action': action,
+                'strategy': strategy,
+                'pnl': 0
+            }
+            await self.state.redis.lpush('signals:history', json.dumps(signal))
+            await self.state.redis.ltrim('signals:history', 0, 99)
+        except: pass
+
+    async def _execute_open(self, symbol: str, side: str, qty: float, price: float, stop: float, tp: float, strategy: str = 'UNKNOWN'):
         main_side = 'BUY' if side == 'LONG' else 'SELL'
-        qty_str = f"{qty:.3f}" if 'BTC' in symbol else f"{qty:.2f}"
+        qty_str = f"{qty}" # Already rounded
         
-        log.info(f"[TESTNET ORDER] OPEN {side} {symbol} qty={qty_str} @ {price}")
+        log.info(f"🚀 [REAL ORDER] OPEN {side} {symbol} qty={qty_str} @ {price}")
         
         # Log signal for chart
         try:
