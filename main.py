@@ -3,6 +3,7 @@ import logging
 import signal
 import json
 import uvicorn
+import os
 from datetime import datetime
 from contextlib import suppress
 
@@ -55,10 +56,10 @@ class RedisLogHandler(logging.Handler):
 
 async def start_api_server(state: StateManager):
     """Run FastAPI dashboard backend."""
-    import os
     port = int(os.environ.get("PORT", 8000))
+    log.info(f"🌍 Starting API Server on port {port} (with proxy headers)")
     app = create_app(state)
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning", proxy_headers=True, forwarded_allow_ips='*')
     server = uvicorn.Server(config)
     await server.serve()
 
