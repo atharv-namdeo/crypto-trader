@@ -52,18 +52,10 @@ class PreLaunchValidator:
         return all_passed
     
     async def _validate_api_credentials(self) -> bool:
-        """Verify Binance API keys are valid"""
+        """Verify Binance API keys are valid using config helper"""
+        from config import get_exchange, settings
         try:
-            api_key = os.getenv('BINANCE_API_KEY')
-            api_secret = os.getenv('BINANCE_API_SECRET')
-            if not api_key or not api_secret:
-                return False
-                
-            exchange = ccxt.binance({
-                'apiKey': api_key,
-                'secret': api_secret,
-                'options': {'defaultType': 'future'}
-            })
+            exchange = get_exchange(use_testnet=settings.BINANCE_TESTNET)
             # Test with a simple read-only operation
             balance = await exchange.fetch_balance()
             return balance is not None and 'total' in balance
@@ -78,7 +70,8 @@ class PreLaunchValidator:
             if not os.path.exists(models_path):
                 os.makedirs(models_path, exist_ok=True)
                 
-            required_models = ['rf_btceth.pkl', 'xgb_btceth.pkl']
+            # UPDATED: Match existing filenames from dir listing
+            required_models = ['xgboost_btceth.pkl', 'lstm_btceth.pth']
             
             for model_file in required_models:
                 model_path = os.path.join(models_path, model_file)
@@ -86,9 +79,9 @@ class PreLaunchValidator:
                     log.warning(f"Model missing: {model_file}")
                     return False
             
-            # Test loading
-            rf = joblib.load(os.path.join(models_path, 'rf_btceth.pkl'))
-            return rf is not None
+            # Test loading XGBoost
+            xgb = joblib.load(os.path.join(models_path, 'xgboost_btceth.pkl'))
+            return xgb is not None
         except Exception as e:
             log.error(f"Model validation failed: {e}")
             return False

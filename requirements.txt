@@ -8,7 +8,6 @@ scikit-learn>=1.2.0
 xgboost>=1.7.0
 lightgbm>=3.3.5
 torch>=2.0.0
-tensorflow>=2.10.0
 
 # API & Async
 fastapi>=0.95.0

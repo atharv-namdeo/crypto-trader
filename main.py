@@ -232,7 +232,9 @@ async def main():
         if not await validator.run_full_validation():
             log.error("❌ PRE-LAUNCH VALIDATION FAILED - CRITICAL ERRORS DETECTED")
             validator.print_validation_report()
-            log.error("Fix the above issues before starting live trading. Exiting.")
+            log.error("Check your Railway Environment Variables (API Keys, Redis URL, Model Files).")
+            # Wait a bit to ensure logs are sent to Railway
+            await asyncio.sleep(2)
             return
         validator.print_validation_report()
         log.info("✅ ALL PRE-LAUNCH CHECKS PASSED - STARTING LIVE TRADING")
