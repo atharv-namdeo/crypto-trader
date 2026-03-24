@@ -162,15 +162,19 @@ async def main():
         if await state.get(f"settings:{k}") is None:
             await state.set(f"settings:{k}", v)
 
-    # 4. Init Managers
+    # 4.     # 4. Initialize Data Sources & Shared State
     ws_feed     = WebSocketManager(SYMBOLS, state)
     candle_feed = CandleFeedManager(SYMBOLS, ["1m", "5m", "15m", "1h", "4h", "1d"], state)
     features    = FeatureEngine(SYMBOLS, state)
-    
     risk_manager  = RiskManager(state)
     risk_guardian = RiskGuardian(state)
     order_engine  = OrderEngine(state)
     pnl_tracker = PnLTracker(state)
+
+    # --- START API IMMEDIATELY FOR HEALTH CHECKS ---
+    api_task = asyncio.create_task(start_api_server(state))
+    # Give API a moment to bind
+    await asyncio.sleep(1)
 
     # 5. Init Parallel Strategies
     scalper  = ScalperStrategy(state, pnl_tracker, capital=200.0)
@@ -178,14 +182,17 @@ async def main():
     position = PositionStrategy(state, pnl_tracker, capital=400.0)
     ai_ensemble = AIEnsembleStrategy(state, pnl_tracker, capital=200.0)
 
-    # 5.1 Startup Checks (Paper 1 & 4)
-    log.info("🔍 Running startup Anomaly Detection...")
-    detector = AnomalyDetector()
-    for symbol in SYMBOLS:
-        df_1h = await state.get_df(f"ohlcv:1h:{symbol}", n=100)
-        if df_1h is not None:
-            res = detector.detect(df_1h['close'].tolist())
-            log.info(f"Anomaly Check [{symbol}]: Z={res['z_score']:.2f} {'(!!!)' if res['is_abnormal'] else '(Normal)'}")
+    # 5.1 Startup Checks (Paper 1 & 4) - Wrapped in task to prevent blocking
+    async def run_startup_checks():
+        log.info("🔍 Running startup Anomaly Detection...")
+        detector = AnomalyDetector()
+        for symbol in SYMBOLS:
+            df_1h = await state.get_df(f"ohlcv:1h:{symbol}", n=100)
+            if df_1h is not None:
+                res = detector.detect(df_1h['close'].tolist())
+                log.info(f"Anomaly Check [{symbol}]: Z={res['z_score']:.2f} {'(!!!)' if res['is_abnormal'] else '(Normal)'}")
+    
+    asyncio.create_task(run_startup_checks())
 
     # 5.2 Background ML Tasks
     async def train_ml_models():
@@ -195,9 +202,7 @@ async def main():
         for symbol in SYMBOLS:
             df_full = await state.get_df(f"ohlcv:1h:{symbol}", n=1000)
             if df_full is not None:
-                # Train RF/GB
                 await asyncio.get_event_loop().run_in_executor(None, rf_gb.train, df_full)
-                # Boruta Feature Selection
                 target = df_full['close'].shift(-1) > df_full['close']
                 await asyncio.get_event_loop().run_in_executor(None, boruta.select_features, df_full, target)
         log.info("✅ Background ML training complete.")
@@ -206,6 +211,8 @@ async def main():
 
     # 6. Create Coroutines
     tasks = [
+        api_task,
+        asyncio.create_task(sync_dashboard(state)),
         asyncio.create_task(risk_manager.run_loop(interval=1)),
         asyncio.create_task(risk_guardian.run_loop(interval=60)),
         asyncio.create_task(order_engine.run_loop(interval=1)),
@@ -216,8 +223,6 @@ async def main():
         asyncio.create_task(swing.run_loop()),
         asyncio.create_task(position.run_loop()),
         asyncio.create_task(ai_ensemble.run_loop()),
-        asyncio.create_task(start_api_server(state)),
-        asyncio.create_task(sync_dashboard(state)),
         asyncio.create_task(daily_summary_loop(state)),
     ]
 
