@@ -1,35 +1,54 @@
 import os
 from dotenv import load_dotenv
-import ccxt
+from pydantic_settings import BaseSettings
+from typing import List, Optional
 
 load_dotenv()
 
-# Trading Mode - Forced to false since we use Binance Demo natively
-DRY_RUN = False
-CAPITAL = float(os.getenv('CAPITAL', '1000'))
-INR_RATE = 84.5 # Fixed conversion rate for display
+class Settings(BaseSettings):
+    # --- BINANCE KEYS ---
+    BINANCE_TEST_API_KEY: str = ""
+    BINANCE_TEST_API_SECRET: str = ""
+    BINANCE_REAL_API_KEY: str = ""
+    BINANCE_REAL_API_SECRET: str = ""
+    
+    # UNIFIED KEYS
+    BINANCE_API_KEY: str = ""
+    BINANCE_API_SECRET: str = ""
 
-# Symbols to trade (USDS-M Futures)
-SYMBOLS = [
-    'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT',
-    'MATIC/USDT', 'AVAX/USDT', 'LINK/USDT', 'UNI/USDT', 'DOT/USDT',
-    'LTC/USDT', 'SHIB/USDT', 'TRX/USDT', 'BCH/USDT', 'NEAR/USDT'
-]
+    # --- BOT SETTINGS ---
+    DRY_RUN: bool = False
+    BINANCE_TESTNET: bool = True
+    CAPITAL: float = 1000.0
+    RISK_PER_TRADE: float = 0.02
+    
+    # --- REDIS ---
+    REDIS_URL: str = "redis://localhost:6379"
+    
+    # --- TELEGRAM ---
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
 
-# Timeframes for analysis
-TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '2h', '4h']
-MACRO_TIMEFRAME = '4h'
+    # --- TRADING CONFIG ---
+    SYMBOLS: List[str] = [
+        'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT',
+        'MATIC/USDT', 'AVAX/USDT', 'LINK/USDT', 'UNI/USDT', 'DOT/USDT'
+    ]
+    TIMEFRAMES: List[str] = ['1m', '5m', '15m', '1h', '4h']
 
-# Redis
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+settings = Settings()
 
+# Exposed for backward compatibility
+SYMBOLS = settings.SYMBOLS
+CAPITAL = settings.CAPITAL
+REDIS_URL = settings.REDIS_URL
 
 def get_exchange(use_testnet=True):
-    """Create and return a configured Binance exchange instance."""
+    import ccxt
     prefix = 'BINANCE_TEST_' if use_testnet else 'BINANCE_REAL_'
     
-    api_key = os.getenv(prefix + 'API_KEY', '')
-    api_secret = os.getenv(prefix + 'API_SECRET', '')
+    api_key = getattr(settings, f"{prefix}API_KEY") or settings.BINANCE_API_KEY
+    api_secret = getattr(settings, f"{prefix}API_SECRET") or settings.BINANCE_API_SECRET
     
     exchange = ccxt.binance({
         'apiKey': api_key,
@@ -45,10 +64,6 @@ def get_exchange(use_testnet=True):
     if use_testnet:
         try:
             exchange.set_sandbox_mode(True)
-            exchange.urls['api'] = {
-                'public': 'https://testnet.binancefuture.com/fapi/v1',
-                'private': 'https://testnet.binancefuture.com/fapi/v1',
-            }
         except Exception as e:
             print(f"⚠️ Sandbox mode error: {e}")
             
