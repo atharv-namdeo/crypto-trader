@@ -14,7 +14,14 @@ import SignalHeatmap from './components/SignalHeatmap';
 import TradingChart from './components/TradingChart';
 
 const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
-const WS_BASE = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:8000/ws`;
+// Fallback logic: if VITE_WS_URL is missing, derive it from API_BASE
+const WS_BASE = import.meta.env.VITE_WS_URL || 
+  (API_BASE.startsWith('https') 
+    ? API_BASE.replace('https', 'wss').replace(/\/$/, '') + '/ws'
+    : API_BASE.replace('http', 'ws').replace(/\/$/, '') + '/ws');
+
+console.log('API_BASE:', API_BASE);
+console.log('WS_BASE:', WS_BASE);
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
