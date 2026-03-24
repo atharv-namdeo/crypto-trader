@@ -98,9 +98,19 @@ def create_app(state: StateManager):
                 # 1. Market Data
                 market_data = {}
                 for symbol in ["BTC/USDT", "ETH/USDT"]:
-                    s_clean = symbol.replace("/", "")
+                    price = float(await state.get_float(f"price:{symbol}") or 0.0)
+                    
+                    # Calculate 24h change
+                    change_24h = 0.0
+                    df_24h = await state.get_df(f"ohlcv:1h:{symbol}", n=24)
+                    if df_24h is not None and not df_24h.empty:
+                        open_24h = float(df_24h.iloc[0]['close'])
+                        if open_24h > 0:
+                            change_24h = ((price - open_24h) / open_24h) * 100
+                            
                     market_data[symbol] = {
-                        "price": float(await state.get_float(f"price:{symbol}") or 0.0),
+                        "price": price,
+                        "change": change_24h,
                         "funding": float(await state.get_float(f"funding:{symbol}") or 0.0),
                         "fuzzy": await state.get(f"fuzzy_scores:{symbol}") or {},
                         "candles": {
@@ -116,21 +126,35 @@ def create_app(state: StateManager):
                 # 2. Strategy Stats
                 stats = {}
                 for s in ["scalper", "swing", "position", "ai_ensemble"]:
+                    # pos_count: Count active position keys in Redis
+                    pos_keys = await state.redis.keys(f"{s}:pos:*")
                     stats[s] = {
                         "trades": int(await state.get(f"stats:{s}:trades") or 0),
                         "wins": int(await state.get(f"stats:{s}:wins") or 0),
                         "pnl": float(await state.get(f"stats:{s}:pnl") or 0.0),
-                        "pos_count": len(await state.redis.keys(f"{s}:pos:*"))
+                        "pos_count": len(pos_keys),
+                        "status": "ACTIVE" if pos_keys else "SCANNING"
                     }
                 payload["data"]["strategies"] = stats
 
                 # 3. Portfolio & Metrics
-                payload["data"]["portfolio"] = await state.get_float('portfolio:value') or 0.0
-                payload["data"]["metrics"] = {
+                # Get ensemble sentiment for BTC
+                ens_sig_raw = await state.get("ensemble_signal:BTC/USDT")
+                sentiment = "NEUTRAL"
+                if ens_sig_raw:
+                    ens_sig = json.loads(ens_sig_raw)
+                    raw_sentiment = ens_sig.get('signal', 'NEUTRAL')
+                    if raw_sentiment == 'BUY': sentiment = 'BULL'
+                    elif raw_sentiment == 'SELL': sentiment = 'BEAR'
+                    else: sentiment = 'NEUTRAL'
+
+                payload["data"]["portfolio"] = {
+                    "value": float(await state.get_float('portfolio:value') or 0.0),
                     "sharpe": float(await state.get('metrics:sharpe') or 0),
                     "drawdown": float(await state.get('metrics:drawdown') or 0),
-                    "pf": float(await state.get('metrics:profit_factor') or 0),
-                    "winrate": float(await state.get('metrics:winrate') or 0)
+                    "profit_factor": float(await state.get('metrics:profit_factor') or 0),
+                    "win_rate": float(await state.get('metrics:winrate') or 0),
+                    "sentiment": sentiment
                 }
 
                 # 4. History (last 20 items to save bandwidth)

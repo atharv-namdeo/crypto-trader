@@ -6,6 +6,7 @@ const StrategyCards = ({ stats }) => {
     { title: 'SCALPER', id: 'scalper', hold: '5-15m', desc: 'High-frequency noise capture' },
     { title: 'SWING', id: 'swing', hold: '1-6h', desc: 'Intermediate trend riding' },
     { title: 'POSITION', id: 'position', hold: '4-24h', desc: 'Long-term structural alignment' },
+    { title: 'AI ENSEMBLE', id: 'ai_ensemble', hold: '5-15m', desc: 'Neural Weighted Ensemble' },
   ];
 
   return (

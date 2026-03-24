@@ -54,13 +54,20 @@ const App = () => {
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'engine_update') {
-        setData(prev => ({ ...prev, ...msg.data }));
-        
+        setData(prev => {
+          const newData = { ...prev, ...msg.data };
+          // Map backend 'metrics' if present into portfolio for consistency
+          if (msg.data.portfolio && typeof msg.data.portfolio === 'object') {
+             newData.portfolio = { ...newData.portfolio, ...msg.data.portfolio };
+          }
+          return newData;
+        });
+
         // Update chart with latest candle if it matches timeframe
         if (msg.data.latest_candles && msg.data.latest_candles[timeframe]) {
           const newCandle = msg.data.latest_candles[timeframe][0];
           if (newCandle) {
-            setChartCandles([newCandle]); // TradingChart handles the append logic via useEffect
+            setChartCandles([newCandle]);
           }
         }
       }
