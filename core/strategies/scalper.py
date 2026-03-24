@@ -7,7 +7,7 @@ import traceback
 from config import SYMBOLS, CAPITAL
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
-from strategies.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
+from core.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
 from core.fuzzy_engine import FuzzyEngine
 
 log = logging.getLogger("Scalper")
