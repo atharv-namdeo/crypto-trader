@@ -58,9 +58,14 @@ const App = () => {
 
   useEffect(() => {
     const ws = new WebSocket(WS_BASE);
+    ws.onopen = () => console.log('✅ WebSocket Connected to:', WS_BASE);
+    ws.onerror = (e) => console.error('❌ WebSocket Error:', e);
+    ws.onclose = () => console.warn('⚠️ WebSocket Closed');
+    
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'engine_update') {
+        console.log('📬 Update Received:', msg.data);
         setData(prev => {
           const newData = { ...prev, ...msg.data };
           // Map backend 'metrics' if present into portfolio for consistency
