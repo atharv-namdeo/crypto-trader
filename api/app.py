@@ -56,13 +56,14 @@ def create_app(state: StateManager):
 
     @app.get("/strategies")
     async def get_strategy_status():
+        if not state.redis: return {"error": "Redis not connected"}
         stats = {}
         for s in ["scalper", "swing", "position", "ai_ensemble"]:
             stats[s] = {
                 "trades": int(await state.get(f"stats:{s}:trades") or 0),
                 "wins": int(await state.get(f"stats:{s}:wins") or 0),
                 "pnl": float(await state.get(f"stats:{s}:pnl") or 0.0),
-                "pos_count": len(await state.redis.keys(f"{s}:pos:*"))
+                "pos_count": len(await state.redis.keys(f"{s}:pos:*") if state.redis else [])
             }
         return stats
 
@@ -93,6 +94,11 @@ def create_app(state: StateManager):
         log.info(f"Dashboard WS connected")
         try:
             while True:
+                if not state.redis:
+                    await websocket.send_json({"type": "info", "data": "Waiting for Redis..."})
+                    await asyncio.sleep(5)
+                    continue
+
                 payload = {"type": "engine_update", "data": {}}
                 
                 # 1. Market Data
@@ -127,7 +133,7 @@ def create_app(state: StateManager):
                 stats = {}
                 for s in ["scalper", "swing", "position", "ai_ensemble"]:
                     # pos_count: Count active position keys in Redis
-                    pos_keys = await state.redis.keys(f"{s}:pos:*")
+                    pos_keys = await state.redis.keys(f"{s}:pos:*") if state.redis else []
                     stats[s] = {
                         "trades": int(await state.get(f"stats:{s}:trades") or 0),
                         "wins": int(await state.get(f"stats:{s}:wins") or 0),
