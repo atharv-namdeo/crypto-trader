@@ -120,7 +120,7 @@ def create_app(state: StateManager):
                         "funding": float(await state.get_float(f"funding:{symbol}") or 0.0),
                         "fuzzy": await state.get(f"fuzzy_scores:{symbol}") or {},
                         "candles": {
-                            tf: (await state.get_df(f"ohlcv:{tf}:{symbol}", n=1)).to_dict(orient='records') if await state.redis.exists(f"ohlcv:{tf}:{symbol}") else []
+                            tf: (await state.get_df(f"ohlcv:{tf}:{symbol}", n=1)).to_dict(orient='records') if (state.redis and await state.redis.exists(f"ohlcv:{tf}:{symbol}")) else []
                             for tf in ["1m", "5m", "15m", "1h", "4h"]
                         }
                     }

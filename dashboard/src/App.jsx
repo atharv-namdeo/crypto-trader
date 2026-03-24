@@ -27,6 +27,8 @@ const App = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [timeframe, setTimeframe] = useState('1h');
   const [chartCandles, setChartCandles] = useState([]);
+  const [wsStatus, setWsStatus] = useState('OFFLINE');
+  const [errorCount, setErrorCount] = useState(0);
   const [data, setData] = useState({
     market: {},
     strategies: {},
@@ -58,13 +60,28 @@ const App = () => {
 
   useEffect(() => {
     const ws = new WebSocket(WS_BASE);
-    ws.onopen = () => console.log('✅ WebSocket Connected to:', WS_BASE);
-    ws.onerror = (e) => console.error('❌ WebSocket Error:', e);
-    ws.onclose = () => console.warn('⚠️ WebSocket Closed');
+    ws.onopen = () => {
+      console.log('✅ WebSocket Connected');
+      setWsStatus('CONNECTED');
+      setErrorCount(0);
+    };
+    ws.onerror = (e) => {
+      console.error('❌ WebSocket Error:', e);
+      setWsStatus('ERROR');
+      setErrorCount(prev => prev + 1);
+    };
+    ws.onclose = () => {
+      console.warn('⚠️ WebSocket Closed');
+      setWsStatus('OFFLINE');
+    };
     
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      if (msg.type === 'engine_update') {
+      if (msg.type === 'info') {
+        console.info('📬 Backend Info:', msg.data);
+        if (msg.data.includes('Redis')) setWsStatus('WAITING_REDIS');
+      } else if (msg.type === 'engine_update') {
+        setWsStatus('LIVE');
         console.log('📬 Update Received:', msg.data);
         setData(prev => {
           const newData = { ...prev, ...msg.data };
@@ -132,6 +149,20 @@ const App = () => {
                 </div>
               </div>
 
+              <div className="flex items-center gap-4">
+            <div className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+              wsStatus === 'LIVE' ? 'bg-green/10 text-green border-green/20' :
+              wsStatus === 'CONNECTED' ? 'bg-blue/10 text-blue border-blue/20' :
+              wsStatus === 'WAITING_REDIS' ? 'bg-yellow/10 text-yellow border-yellow/20' :
+              'bg-red/10 text-red border-red/20'
+            }`}>
+              {wsStatus} {errorCount > 0 && `(${errorCount})`}
+            </div>
+            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-black text-text-muted">
+              <span className="w-1.5 h-1.5 bg-accent rounded-full animate-ping"></span>
+              Live WebSocket Engine V6.5
+            </span>
+          </div>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                   <div className="h-[450px]">

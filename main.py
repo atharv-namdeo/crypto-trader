@@ -135,7 +135,11 @@ async def daily_summary_loop(state: StateManager):
             await asyncio.sleep(60)
 
 async def main():
-    # 1. Connect Redis first to setup logging
+    # 3. Connect to State Manager (Redis)
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    masked_url = redis_url.split('@')[-1] if '@' in redis_url else redis_url
+    log.info(f"💾 Connecting to Redis at: {masked_url}")
+    
     state = StateManager()
     await state.connect()
     
