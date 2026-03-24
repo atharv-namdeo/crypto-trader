@@ -35,7 +35,7 @@ class BorutaSelector:
         if target.dtype == 'float64':
             target = (target > target.shift(1)).astype(int)
             
-        X = df.copy()
+        X = df.select_dtypes(include=[np.number]).copy()
         y = target.copy()
         
         # 1. & 2. Create Shadow Features

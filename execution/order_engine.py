@@ -138,20 +138,22 @@ class OrderEngine:
             log.error(f"🔥 Process Order Error: {e}")
             return False
 
+    def _validate_and_round(self, symbol: str, side: str, qty: float, price: float, stop: float = None, tp: float = None):
+        """Dynamic rounding and sanity checks."""
         try:
             # Dynamic rounding based on symbol
             if 'BTC' in symbol:
                 qty, price = round(qty, 3), round(price, 1)
-                sl, tp = round(sl or 0, 1), round(tp or 0, 1)
+                sl, tp = round(stop or 0, 1), round(tp or 0, 1)
                 min_qty = 0.001
             elif 'ETH' in symbol:
                 qty, price = round(qty, 2), round(price, 2)
-                sl, tp = round(sl or 0, 2), round(tp or 0, 2)
+                sl, tp = round(stop or 0, 2), round(tp or 0, 2)
                 min_qty = 0.01
             else:
                 # Generic for altcoins
                 qty, price = round(qty, 1), round(price, 4)
-                sl, tp = round(sl or 0, 4), round(tp or 0, 4)
+                sl, tp = round(stop or 0, 4), round(tp or 0, 4)
                 min_qty = 0.1
                 
             if qty < min_qty:
@@ -159,7 +161,8 @@ class OrderEngine:
                 return False, 0, 0, 0, 0
             
             return True, qty, price, sl, tp
-        except:
+        except Exception as e:
+            log.error(f"Error in _validate_and_round: {e}")
             return False, 0, 0, 0, 0
 
     async def _log_signal(self, price, side, action, strategy):

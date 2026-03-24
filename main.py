@@ -52,13 +52,15 @@ class RedisLogHandler(logging.Handler):
 
     def emit(self, record):
         try:
-            log_entry = {
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "level": record.levelname,
-                "name": record.name,
-                "msg": self.format(record)
-            }
-            asyncio.create_task(self._push(log_entry))
+            loop = asyncio.get_event_loop_policy().get_event_loop()
+            if loop.is_running():
+                log_entry = {
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "level": record.levelname,
+                    "name": record.name,
+                    "msg": self.format(record)
+                }
+                loop.create_task(self._push(log_entry))
         except Exception:
             pass
 

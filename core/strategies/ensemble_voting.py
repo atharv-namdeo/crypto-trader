@@ -21,6 +21,10 @@ class EnsembleVotingStrategy(BaseStrategy):
         df_1h = await self.state.get_df(f"ohlcv:1h:{symbol}", n=100)
         if df_1h is None or len(df_1h) < 26: return
         
+        # Ensure only numeric data is used for calculations
+        df_1h = df_1h.select_dtypes(include=[np.number])
+        if df_1h.empty: return
+        
         price = float(df_1h['close'].iloc[-1])
         votes = {} # {signal: confidence}
         

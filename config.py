@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # --- TRADING CONFIG ---
     SYMBOLS: List[str] = [
         'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT',
-        'MATIC/USDT', 'AVAX/USDT', 'LINK/USDT', 'UNI/USDT', 'DOT/USDT'
+        'POL/USDT', 'AVAX/USDT', 'LINK/USDT', 'UNI/USDT', 'DOT/USDT'
     ]
     # UPDATED: Dictionary format as requested, plus extras for swing/position
     TIMEFRAMES: Dict[str, str] = {
@@ -52,7 +52,7 @@ REDIS_URL = settings.REDIS_URL
 TIMEFRAMES = settings.TIMEFRAMES
 
 def get_exchange(use_testnet=True):
-    import ccxt
+    import ccxt.async_support as ccxt
     prefix = 'BINANCE_TEST_' if use_testnet else 'BINANCE_REAL_'
     
     api_key = getattr(settings, f"{prefix}API_KEY") or settings.BINANCE_API_KEY

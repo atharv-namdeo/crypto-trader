@@ -61,7 +61,7 @@ class ParallelMLPredictor:
             tasks.append(self._run_model('lstm', 'LSTM', features))
             
         if not tasks:
-            return {'signal': 'HOLD', 'confidence': 0, 'reason': 'No models loaded'}
+            return {'signal': 'HOLD', 'confidence': 0, 'ensemble_val': 0.5, 'reason': 'No models loaded'}
             
         start_time = time.time()
         results = await asyncio.gather(*tasks, return_exceptions=True)

@@ -12,12 +12,11 @@ class PortfolioRiskManager:
 
     SECTORS = {
         'L1': ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'NEAR/USDT', 'LTC/USDT', 'BCH/USDT', 'TRX/USDT'],
-        'L2': ['MATIC/USDT', 'ARB/USDT', 'OP/USDT'],
+        'L2': ['POL/USDT', 'ARB/USDT', 'OP/USDT'],
         'DEFI': ['LINK/USDT', 'UNI/USDT', 'AAVE/USDT'],
         'MEME': ['SHIB/USDT', 'DOGE/USDT'],
         'PAYMENT': ['XRP/USDT', 'LTC/USDT', 'BCH/USDT'],
         'ORACLE': ['LINK/USDT'],
-        'DEFI': ['UNI/USDT', 'AAVE/USDT'],
         'LEGACY': ['BTC/USDT']
     }
 
