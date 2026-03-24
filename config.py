@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 load_dotenv()
 
