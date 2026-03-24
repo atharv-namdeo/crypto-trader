@@ -34,7 +34,14 @@ class Settings(BaseSettings):
         'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT',
         'MATIC/USDT', 'AVAX/USDT', 'LINK/USDT', 'UNI/USDT', 'DOT/USDT'
     ]
-    TIMEFRAMES: List[str] = ['1m', '5m', '15m', '1h', '4h']
+    # UPDATED: Dictionary format as requested, plus extras for swing/position
+    TIMEFRAMES: Dict[str, str] = {
+        'scalper': '1m',
+        'swing': '1h',
+        'position': '4h',
+        'swing_extra': '4h',
+        'position_extra': '1d'
+    }
 
 settings = Settings()
 
@@ -42,6 +49,7 @@ settings = Settings()
 SYMBOLS = settings.SYMBOLS
 CAPITAL = settings.CAPITAL
 REDIS_URL = settings.REDIS_URL
+TIMEFRAMES = settings.TIMEFRAMES
 
 def get_exchange(use_testnet=True):
     import ccxt

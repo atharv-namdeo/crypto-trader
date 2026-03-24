@@ -18,7 +18,11 @@ class MultiAssetDataManager:
         self.exchange = exchange
         self.state = state
         self.symbols = SYMBOLS
-        self.timeframes = TIMEFRAMES
+        # Handle dict vs list for backward/forward compatibility
+        if isinstance(TIMEFRAMES, dict):
+            self.timeframes = list(set(TIMEFRAMES.values()))
+        else:
+            self.timeframes = TIMEFRAMES
         self.semaphore = asyncio.Semaphore(10)  # Limit concurrent API calls
         self.last_fetch = {}  # Track last update per symbol/timeframe
 
