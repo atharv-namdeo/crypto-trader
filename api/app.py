@@ -1,5 +1,5 @@
 import json
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import logging
@@ -8,7 +8,7 @@ from datetime import datetime
 from core.state_manager import StateManager
 from api.metrics import router as metrics_router
 
-from security.production_hardening import setup_production_security
+from security.production_hardening import setup_production_security, verify_api_key
 
 log = logging.getLogger("FastAPI")
 
@@ -41,7 +41,7 @@ def create_app(state: StateManager):
     async def get_health():
         return {"status": "ok", "redis": state.redis is not None}
 
-    @app.post("/api/v1/order")
+    @app.post("/api/v1/order", dependencies=[Depends(verify_api_key)])
     async def manage_order(payload: dict = Body(...)):
         """Close now or move stop"""
         symbol = payload.get('symbol')
@@ -58,7 +58,7 @@ def create_app(state: StateManager):
             settings[key] = await state.get(f"settings:{key}")
         return {"data": settings}
 
-    @app.post("/api/v1/settings")
+    @app.post("/api/v1/settings", dependencies=[Depends(verify_api_key)])
     async def update_settings(settings: dict = Body(...)):
         for k, v in settings.items():
             await state.set(f"settings:{k}", v)

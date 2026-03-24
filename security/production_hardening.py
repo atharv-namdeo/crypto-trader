@@ -8,6 +8,17 @@ from slowapi.errors import RateLimitExceeded
 
 log = logging.getLogger("Security")
 
+async def verify_api_key(x_api_key: str = Header(None)):
+    """Simple API Key validation"""
+    expected_key = os.getenv("TRADER_API_KEY")
+    if not expected_key:
+        return # Skip if not configured
+        
+    if x_api_key != expected_key:
+        log.warning(f"🚫 Unauthorized API Access attempt")
+        raise HTTPException(status_code=403, detail="Invalid API Key")
+    return x_api_key
+
 class ProductionSecurityHardening:
     """Enterprise-grade security for production"""
     
@@ -28,18 +39,6 @@ class ProductionSecurityHardening:
             allow_headers=["*"],
         )
         log.info(f"🛡️ CORS Applied: {allowed_origins}")
-
-    @staticmethod
-    async def verify_api_key(x_api_key: str = Header(None)):
-        """Simple API Key validation"""
-        expected_key = os.getenv("TRADER_API_KEY")
-        if not expected_key:
-            return # Skip if not configured
-            
-        if x_api_key != expected_key:
-            log.warning(f"🚫 Unauthorized API Access attempt")
-            raise HTTPException(status_code=403, detail="Invalid API Key")
-        return x_api_key
 
 def setup_production_security(app):
     """Utility to apply all hardening to a FastAPI app"""
