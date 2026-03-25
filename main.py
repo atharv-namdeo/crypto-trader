@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 from contextlib import suppress
 
+import config
 from config import SYMBOLS, CAPITAL, get_exchange
 from core.state_manager import StateManager
 from reporting.report_scheduler import ReportScheduler
