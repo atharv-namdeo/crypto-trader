@@ -109,7 +109,7 @@ const Dashboard = () => {
 
       {/* Row 4: Risk Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pb-8">
-        <RiskCard title="Profit Factor" value={(portfolio.profit_factor || 0).toFixed(2)} subValue={`Target ${'>'} 2.0`} trend="up" color="green" />
+        <RiskCard title="Profit Factor" value={(portfolio.profit_factor || 0).toFixed(2)} subValue="Target &gt; 2.0" trend="up" color="green" />
         <RiskCard title="Max Drawdown" value={`${(portfolio.drawdown || 0).toFixed(2)}%`} subValue="Limit 5%" trend="down" color="red" />
         <RiskCard title="Volatility (30d)" value="4.2%" subValue="Historical avg" trend="up" color="amber" />
         <RiskCard title="Liquidity Risk" value="Low" subValue="Slippage < 0.1%" trend="up" color="blue" />
