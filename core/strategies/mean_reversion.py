@@ -11,8 +11,8 @@ class MeanReversionStrategy(BaseStrategy):
     Trades when price deviates >2σ from 20-period moving average.
     Perfect for BTC/ETH ranging markets.
     """
-    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 200.0):
-        super().__init__(state, pnl_tracker, capital)
+    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, manager=None, capital: float = 200.0):
+        super().__init__(state, pnl_tracker, manager, capital)
         self.name = "MEAN_REVERT"
 
     async def _process(self, symbol: str):

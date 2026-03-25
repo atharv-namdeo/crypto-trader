@@ -13,8 +13,8 @@ class EnsembleVotingStrategy(BaseStrategy):
     Combine all signals + technical indicators.
     Only trade when multiple signals align.
     """
-    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 300.0):
-        super().__init__(state, pnl_tracker, capital)
+    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, manager=None, capital: float = 300.0):
+        super().__init__(state, pnl_tracker, manager, capital)
         self.name = "ENSEMBLE_VOTE"
 
     async def _process(self, symbol: str):

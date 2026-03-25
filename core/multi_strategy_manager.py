@@ -20,9 +20,11 @@ class MultiStrategyManager:
         # Default Allocations (can be overridden by config)
         self.allocations = {
             'scalper': 0.10,      # 10%
-            'swing': 0.30,        # 30%
-            'position': 0.50,     # 50%
-            'ai_ensemble': 0.10   # 10%
+            'swing': 0.25,        # 25%
+            'position': 0.40,     # 40%
+            'ai_ensemble': 0.10,  # 10%
+            'mean_reversion': 0.05, # 5%
+            'ensemble_voting': 0.10 # 10%
         }
         
         # Per-strategy risk limits
@@ -30,7 +32,9 @@ class MultiStrategyManager:
             'scalper': 5,
             'swing': 3,
             'position': 2,
-            'ai_ensemble': 2
+            'ai_ensemble': 2,
+            'mean_reversion': 2,
+            'ensemble_voting': 2
         }
 
     async def get_active_trades(self, strategy: str) -> List[dict]:

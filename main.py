@@ -315,8 +315,8 @@ async def main():
     ai_ensemble = AIEnsembleStrategy(state, pnl_tracker, manager=strategy_manager)
     
     # Keep legacy/standalone for now if needed, or pass manager if refactored
-    mean_revert = MeanReversionStrategy(state, pnl_tracker, capital=baseline_cap/10)
-    ensemble_vote = EnsembleVotingStrategy(state, pnl_tracker, capital=baseline_cap/10)
+    mean_revert = MeanReversionStrategy(state, pnl_tracker, manager=strategy_manager)
+    ensemble_vote = EnsembleVotingStrategy(state, pnl_tracker, manager=strategy_manager)
 
     # 5.1 Startup Checks (Paper 1 & 4) - Wrapped in task to prevent blocking
     async def run_startup_checks():
