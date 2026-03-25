@@ -1,9 +1,11 @@
 import os
+import logging
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 from typing import List, Optional, Dict
 
 load_dotenv()
+log = logging.getLogger("Config")
 
 class Settings(BaseSettings):
     # --- BINANCE KEYS ---
@@ -87,8 +89,13 @@ def get_exchange(use_testnet=True):
     
     if use_testnet:
         try:
+            # CCXT's set_sandbox_mode(True) for Binance Futures is being deprecated 
+            # by Binance in favor of "Demo Trading". 
             exchange.set_sandbox_mode(True)
         except Exception as e:
-            print(f"⚠️ Sandbox mode error: {e}")
+            if "not supported for futures anymore" in str(e):
+                log.warning("⚠️ Binance Testnet Sandbox is deprecated for Futures. Falling back to default (Demo Trading keys).")
+            else:
+                log.warning(f"⚠️ Sandbox mode error: {e}")
             
     return exchange
