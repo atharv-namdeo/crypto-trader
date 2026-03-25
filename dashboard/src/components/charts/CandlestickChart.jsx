@@ -102,7 +102,7 @@ const CandlestickChart = ({ data, symbol = 'BTC/USDT', timeframe = '1m' }) => {
               cursor={{ stroke: '#1e1e3a', strokeWidth: 1 }}
             />
             
-            <Bar dataKey="close" shape={<CandlestickBar />} />
+            <Bar dataKey="close" shape={CandlestickBar} />
             
             {/* Indicators */}
             <Line dataKey="ema9" dot={false} stroke="#06b6d4" strokeWidth={1} />

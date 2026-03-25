@@ -56,7 +56,7 @@ const Dashboard = () => {
       {/* Row 2: Chart + Signals */}
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-4">
         <div className="lg:col-span-7 card p-4">
-           <CandlestickChart data={data.latest_candles || []} symbol="BTC/USDT" />
+           <CandlestickChart data={data?.latest_candles || []} symbol="BTC/USDT" />
         </div>
         
         <div className="lg:col-span-3 card p-4 flex flex-col h-[600px]">
