@@ -9,6 +9,8 @@ from core.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
 from core.fuzzy_engine import FuzzyEngine
 from config import SYMBOLS
 
+from core.multi_strategy_manager import MultiStrategyManager
+
 log = logging.getLogger("PositionTrader")
 
 def safe_last(value):
@@ -18,16 +20,18 @@ def safe_last(value):
     return float(value)
 
 class PositionStrategy:
-    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 400.0):
+    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, manager: MultiStrategyManager):
         self.state = state
         self.pnl = pnl_tracker
-        self.capital = capital
+        self.manager = manager
+        # Use allocation from manager
+        self.capital = manager.total_capital * manager.allocations.get('position', 0.4)
         self.symbols = SYMBOLS
         self.running = False
 
     async def run_loop(self):
         self.running = True
-        log.info(f"🏔️ Start POSITION Loop (Cap: ${self.capital})")
+        log.info(f"🏔️ Start POSITION Loop (Allocated: ${self.capital})")
         while self.running:
             try:
                 # Check if enabled in dashboard
@@ -138,8 +142,8 @@ class PositionStrategy:
                 await self._close_position(symbol, pos, price, exit_reason)
 
         else:
-            active_holds = len(await self.state.redis.keys("position:pos:*"))
-            if active_holds >= 1:
+            # Check entry logic using MultiStrategyManager
+            if not await self.manager.can_open_trade('position', symbol, required_capital=price * (self.capital * 0.6 / price)):
                 return
 
             rsi_series_4h = compute_rsi(df_4h['close'], 14)
@@ -199,15 +203,18 @@ class PositionStrategy:
             'side': side,
             'entry': price,
             'qty': qty,
+            'nominal_value': qty * price,
             'stop': stop,
             'tp1': tp1,
             'tp2': tp2,
             'time': time.time(),
             'highest': price,
             'lowest': price,
-            'strategy': 'POSITION'
+            'strategy': 'POSITION',
+            'symbol': symbol
         }
         await self.state.set(f"position:pos:{symbol}", pos)
+        await self.manager.register_trade('position', pos)
         
         req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': stop, 'tp': tp2, 'strategy': 'POSITION'}
         await self.state.set(f"order_request:{symbol}", req)
@@ -264,6 +271,7 @@ class PositionStrategy:
         await TelegramNotifier().trade_closed('POSITION', symbol, side, entry, price, qty, pnl_usd, reason, duration_str)
 
         await self.state.redis.delete(f"position:pos:{symbol}")
+        await self.manager.remove_trade('position', symbol)
         
         req = {'action': 'CLOSE', 'side': side, 'qty': qty, 'strategy': 'POSITION'}
         await self.state.set(f"order_request:{symbol}", req)

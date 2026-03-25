@@ -29,13 +29,13 @@ class EnsembleVotingStrategy(BaseStrategy):
         votes = {} # {signal: confidence}
         
         # 1. Signal: RSI (Momentum Reversal)
-        rsi = compute_rsi(df_1h, 14).iloc[-1]
+        rsi = compute_rsi(df_1h['close'], 14).iloc[-1]
         if rsi < 30: votes['RSI_LONG'] = 0.7
         elif rsi > 70: votes['RSI_SHORT'] = 0.7
         
         # 2. Signal: EMA Cross (Trend)
-        ema20 = compute_ema(df_1h, 20).iloc[-1]
-        ema50 = compute_ema(df_1h, 50).iloc[-1]
+        ema20 = compute_ema(df_1h['close'], 20).iloc[-1]
+        ema50 = compute_ema(df_1h['close'], 50).iloc[-1]
         if ema20 > ema50: votes['TREND_LONG'] = 0.8
         elif ema20 < ema50: votes['TREND_SHORT'] = 0.8
         

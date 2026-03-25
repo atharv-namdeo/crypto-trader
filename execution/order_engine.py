@@ -240,13 +240,19 @@ class OrderEngine:
         
         log.info(f"[TESTNET ORDER] CLOSE {side} {symbol} qty={qty_str}")
         
-        close_order = await self.client.futures_create_order(
-            symbol=symbol,
-            side=exit_side,
-            type='MARKET',
-            quantity=qty_str,
-            reduceOnly='true'
-        )
-        log.info(f"[TESTNET FILLED] order_id={close_order['orderId']}")
+        try:
+            close_order = await self.client.futures_create_order(
+                symbol=symbol,
+                side=exit_side,
+                type='MARKET',
+                quantity=qty_str,
+                reduceOnly='true'
+            )
+            log.info(f"[TESTNET FILLED] order_id={close_order['orderId']}")
+        except BinanceAPIException as e:
+            if e.code == -2022:
+                log.warning(f"⚠️ [TESTNET] ReduceOnly rejected for {symbol}: No position to close on exchange.")
+            else:
+                raise e
         
         await self.client.futures_cancel_all_open_orders(symbol=symbol)

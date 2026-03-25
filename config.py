@@ -29,6 +29,22 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
 
+    # --- MULTI-STRATEGY ALLOCATION ---
+    STRATEGY_ALLOCATIONS: Dict[str, float] = {
+        'scalper': 0.15,      # 15%
+        'swing': 0.35,        # 35%
+        'position': 0.40,     # 40%
+        'ai_ensemble': 0.10   # 10%
+    }
+    
+    # Per-strategy position limits
+    MAX_POSITIONS_PER_STRATEGY: Dict[str, int] = {
+        'scalper': 5,
+        'swing': 3,
+        'position': 2,
+        'ai_ensemble': 2
+    }
+
     # --- TRADING CONFIG ---
     SYMBOLS: List[str] = [
         'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT',

@@ -10,6 +10,8 @@ from core.pnl_tracker import PnLTracker
 from core.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
 from core.fuzzy_engine import FuzzyEngine
 
+from core.multi_strategy_manager import MultiStrategyManager
+
 log = logging.getLogger("Scalper")
 
 def safe_last(value):
@@ -19,17 +21,19 @@ def safe_last(value):
     return float(value)
 
 class ScalperStrategy:
-    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 200.0):
+    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, manager: MultiStrategyManager):
         self.state = state
         self.pnl = pnl_tracker
-        self.capital = capital
+        self.manager = manager
+        # Use allocation from manager
+        self.capital = manager.total_capital * manager.allocations.get('scalper', 0.1)
         self.symbols = SYMBOLS
         self.running = False
         self.mode = os.getenv('AI_ENSEMBLE_MODE', 'long_only')
 
     async def run_loop(self):
         self.running = True
-        log.info(f"⚡ Start SCALPER Loop (Cap: ${self.capital})")
+        log.info(f"⚡ Start SCALPER Loop (Allocated: ${self.capital})")
         while self.running:
             try:
                 # Check if enabled in dashboard
@@ -90,14 +94,9 @@ class ScalperStrategy:
                 await self._close_position(symbol, pos, price, exit_reason)
                 
         else:
-            # Check entry logic
-            active_holds = 0
-            for sym in self.symbols:
-                if await self.state.get(f"scalper:pos:{sym}"):
-                    active_holds += 1
-            
-            if active_holds >= 2:
-                return # max concurrent positions reached
+            # Check entry logic using MultiStrategyManager
+            if not await self.manager.can_open_trade('scalper', symbol, required_capital=price * (self.capital * 0.5 / price)):
+                return
 
             fuzzy = FuzzyEngine()
             
@@ -149,10 +148,13 @@ class ScalperStrategy:
             'side': side,
             'entry': price,
             'qty': qty,
+            'nominal_value': qty * price,
             'time': time.time(),
-            'strategy': 'SCALPER'
+            'strategy': 'SCALPER',
+            'symbol': symbol
         }
         await self.state.set(f"scalper:pos:{symbol}", pos)
+        await self.manager.register_trade('scalper', pos)
         
         # Send physical order request to Binance 
         req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': 0, 'tp': 0, 'strategy': 'SCALPER'}
@@ -194,6 +196,7 @@ class ScalperStrategy:
 
         # Clear local state
         await self.state.redis.delete(f"scalper:pos:{symbol}")
+        await self.manager.remove_trade('scalper', symbol)
         
         # Send physical close to Binance
         req = {'action': 'CLOSE', 'side': pos['side'], 'qty': pos['qty'], 'strategy': 'SCALPER'}

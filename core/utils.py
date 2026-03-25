@@ -48,6 +48,9 @@ def compute_ultosc(df: pd.DataFrame, p1: int = 7, p2: int = 14, p3: int = 28) ->
 
 def compute_ema(series: pd.Series, period: int) -> pd.Series:
     """Exponential Moving Average"""
+    if isinstance(series, pd.DataFrame):
+        # If a DataFrame is passed, only calculate for numeric columns
+        return series.select_dtypes(include=[np.number]).ewm(span=period, adjust=False).mean()
     return series.ewm(span=period, adjust=False).mean()
 
 def compute_vwap(df: pd.DataFrame) -> float:

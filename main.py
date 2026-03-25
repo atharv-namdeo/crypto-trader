@@ -39,6 +39,7 @@ from ml.auto_tuner import StrategyAutoTuner
 from execution.pre_launch_validator import PreLaunchValidator
 from execution.graduated_rollout import GraduatedRollout
 from execution.alert_system import AlertSystem, monitor_critical_metrics
+from core.multi_strategy_manager import MultiStrategyManager
 
 from core.telegram_notifier import TelegramNotifier
 telegram = TelegramNotifier()
@@ -285,6 +286,15 @@ async def main():
     alert_system = AlertSystem(state)
     rollout = GraduatedRollout(state, start_capital=float(CAPITAL))
     auto_tuner = StrategyAutoTuner(state)
+    
+    # --- PHASE 22: MULTI-STRATEGY MANAGER ---
+    # Use the Graduated Rollout pos size as our baseline total capital
+    baseline_cap = await rollout.get_position_size()
+    strategy_manager = MultiStrategyManager(state, total_capital=baseline_cap)
+    
+    # Override defaults from config if available
+    strategy_manager.allocations = getattr(config, 'STRATEGY_ALLOCATIONS', strategy_manager.allocations)
+    strategy_manager.max_positions = getattr(config, 'MAX_POSITIONS_PER_STRATEGY', strategy_manager.max_positions)
 
     # --- PHASE 9: MONITORING & REPORTING ---
     report_scheduler = ReportScheduler(state)
@@ -295,17 +305,17 @@ async def main():
     # Give API a moment to bind
     await asyncio.sleep(1)
 
-    # 5. Init Parallel Strategies (Using Graduated Rollout)
-    initial_cap = await rollout.get_position_size()
-    strat_cap = initial_cap / 6
-    log.info(f"💰 Initial Capital Allocation (Phase: {rollout.current_phase}): ${initial_cap:.2f} total (${strat_cap:.2f}/strategy)")
+    # 5. Init Parallel Strategies (Using Multi-Strategy Manager)
+    log.info(f"💰 Multi-Strategy Execution Active | Total Capital: ${baseline_cap:.2f}")
     
-    scalper  = ScalperStrategy(state, pnl_tracker, capital=strat_cap)
-    swing    = SwingStrategy(state, pnl_tracker, capital=strat_cap)
-    position = PositionStrategy(state, pnl_tracker, capital=strat_cap)
-    ai_ensemble = AIEnsembleStrategy(state, pnl_tracker, capital=strat_cap)
-    mean_revert = MeanReversionStrategy(state, pnl_tracker, capital=strat_cap)
-    ensemble_vote = EnsembleVotingStrategy(state, pnl_tracker, capital=strat_cap)
+    scalper  = ScalperStrategy(state, pnl_tracker, manager=strategy_manager)
+    swing    = SwingStrategy(state, pnl_tracker, manager=strategy_manager)
+    position = PositionStrategy(state, pnl_tracker, manager=strategy_manager)
+    ai_ensemble = AIEnsembleStrategy(state, pnl_tracker, manager=strategy_manager)
+    
+    # Keep legacy/standalone for now if needed, or pass manager if refactored
+    mean_revert = MeanReversionStrategy(state, pnl_tracker, capital=baseline_cap/10)
+    ensemble_vote = EnsembleVotingStrategy(state, pnl_tracker, capital=baseline_cap/10)
 
     # 5.1 Startup Checks (Paper 1 & 4) - Wrapped in task to prevent blocking
     async def run_startup_checks():

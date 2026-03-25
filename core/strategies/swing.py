@@ -9,6 +9,8 @@ from core.utils import compute_rsi, compute_vwap, compute_atr, compute_adx
 from core.fuzzy_engine import FuzzyEngine
 from config import SYMBOLS
 
+from core.multi_strategy_manager import MultiStrategyManager
+
 log = logging.getLogger("Swing")
 
 def safe_last(value):
@@ -18,16 +20,18 @@ def safe_last(value):
     return float(value)
 
 class SwingStrategy:
-    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 400.0):
+    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, manager: MultiStrategyManager):
         self.state = state
         self.pnl = pnl_tracker
-        self.capital = capital
+        self.manager = manager
+        # Use allocation from manager
+        self.capital = manager.total_capital * manager.allocations.get('swing', 0.3)
         self.symbols = SYMBOLS
         self.running = False
 
     async def run_loop(self):
         self.running = True
-        log.info(f"🌊 Start SWING Loop (Cap: ${self.capital})")
+        log.info(f"🌊 Start SWING Loop (Allocated: ${self.capital})")
         while self.running:
             try:
                 # Check if enabled in dashboard
@@ -101,12 +105,8 @@ class SwingStrategy:
                 await self._close_position(symbol, pos, price, exit_reason)
                 
         else:
-            # Check concurrency limit
-            active_holds = 0
-            for sym in self.symbols:
-                if await self.state.get(f"swing:pos:{sym}"):
-                    active_holds += 1
-            if active_holds >= 2:
+            # Check entry logic using MultiStrategyManager
+            if not await self.manager.can_open_trade('swing', symbol, required_capital=price * (self.capital * 0.4 / price)):
                 return
 
             fuzzy = FuzzyEngine()
@@ -162,12 +162,15 @@ class SwingStrategy:
             'side': side,
             'entry': price,
             'qty': qty,
+            'nominal_value': qty * price,
             'stop': stop,
             'tp': tp,
             'time': time.time(),
-            'strategy': 'SWING'
+            'strategy': 'SWING',
+            'symbol': symbol
         }
         await self.state.set(f"swing:pos:{symbol}", pos)
+        await self.manager.register_trade('swing', pos)
         
         req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'stop': stop, 'tp': tp, 'strategy': 'SWING'}
         await self.state.set(f"order_request:{symbol}", req)
@@ -207,6 +210,7 @@ class SwingStrategy:
         await TelegramNotifier().trade_closed('SWING', symbol, side, entry, price, qty, pnl_usd, reason, duration_str)
 
         await self.state.redis.delete(f"swing:pos:{symbol}")
+        await self.manager.remove_trade('swing', symbol)
         
         req = {'action': 'CLOSE', 'side': pos['side'], 'qty': pos['qty'], 'strategy': 'SWING'}
         await self.state.set(f"order_request:{symbol}", req)

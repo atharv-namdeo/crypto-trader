@@ -10,13 +10,19 @@ log = logging.getLogger("BaseStrategy")
 
 class BaseStrategy:
     """Standardized strategy interface."""
-    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 200.0):
+    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, manager=None, capital: float = 200.0):
         self.state = state
         self.pnl = pnl_tracker
-        self.capital = capital
+        self.manager = manager
+        # If manager is provided, use its allocation; otherwise use fixed capital
+        if manager:
+            self.capital = manager.total_capital * manager.allocations.get(self.__class__.__name__.lower(), 0.1)
+        else:
+            self.capital = capital
+            
         self.risk = RiskManager(state)
         self.running = False
-        self.name = "BASE"
+        self.name = self.__class__.__name__
         self.symbols = SYMBOLS
 
     async def run(self, interval: int = 60):

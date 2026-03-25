@@ -12,6 +12,7 @@ import time
 import json
 import os
 import traceback
+import numpy as np
 from core.state_manager import StateManager
 from core.pnl_tracker import PnLTracker
 from core.utils import compute_rsi, compute_atr, compute_adx, compute_ultosc, compute_ema
@@ -19,14 +20,17 @@ from ml.ensemble_model import EnsembleModel
 from ml.anomaly_detector import AnomalyDetector
 from core.risk import RiskManager
 from config import SYMBOLS
+from core.multi_strategy_manager import MultiStrategyManager
 
 log = logging.getLogger("AIEnsemble")
 
 class AIEnsembleStrategy:
-    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, capital: float = 200.0):
+    def __init__(self, state: StateManager, pnl_tracker: PnLTracker, manager: MultiStrategyManager):
         self.state = state
         self.pnl = pnl_tracker
-        self.capital = capital
+        self.manager = manager
+        # Use allocation from manager
+        self.capital = manager.total_capital * manager.allocations.get('ai_ensemble', 0.1)
         self.symbols = SYMBOLS
         self.running = False
         # self.ensemble = EnsembleModel() # Replaced by ParallelMLPredictor in main.py
@@ -69,6 +73,10 @@ class AIEnsembleStrategy:
         
         if df_1h is None or len(df_1h) < 20 or not price or not feature_dict:
             return
+
+        # Ensure only numeric data is used for technical calculations
+        df_1h = df_1h.select_dtypes(include=[np.number])
+        if df_1h.empty: return
 
         # 2. Anomaly Gating (Paper 1)
         prices_1h = df_1h['close'].tolist()
@@ -136,9 +144,9 @@ class AIEnsembleStrategy:
         atr = float(compute_atr(df_1h, 14).iloc[-1])
         
         # 5. Custom Technical Filters (The "Custom" Layer)
-        ema20 = compute_ema(df_1h, 20).iloc[-1]
-        ema50 = compute_ema(df_1h, 50).iloc[-1]
-        rsi = compute_rsi(df_1h, 14).iloc[-1]
+        ema20 = compute_ema(df_1h['close'], 20).iloc[-1]
+        ema50 = compute_ema(df_1h['close'], 50).iloc[-1]
+        rsi = compute_rsi(df_1h['close'], 14).iloc[-1]
         
         trend_up = ema20 > ema50
         trend_down = ema20 < ema50
@@ -210,20 +218,26 @@ class AIEnsembleStrategy:
                 qty = size_data['qty']
                 
                 if qty > 0 and self.risk.validate_trade(side, price, sl, tp, qty, self.capital):
-                    await self._open_position(symbol, side, price, sl, tp, qty, confidence)
+                    # Check MultiStrategyManager for capital/position gating
+                    nominal = qty * price
+                    if await self.manager.can_open_trade('ai_ensemble', symbol, required_capital=nominal):
+                        await self._open_position(symbol, side, price, sl, tp, qty, confidence)
 
     async def _open_position(self, symbol: str, side: str, price: float, sl: float, tp: float, qty: float, confidence: float):
         pos = {
             'side': side,
             'entry': price,
+            'nominal_value': qty * price,
             'sl': sl,
             'tp': tp,
             'high_low': price,
             'qty': qty,
             'time': time.time(),
-            'strategy': 'AI_ENSEMBLE'
+            'strategy': 'AI_ENSEMBLE',
+            'symbol': symbol
         }
         await self.state.set(f"ai_ensemble:pos:{symbol}", pos)
+        await self.manager.register_trade('ai_ensemble', pos)
         
         # Signal for dashboard
         signal = {
@@ -251,6 +265,7 @@ class AIEnsembleStrategy:
         await self.pnl.record_trade('AI_ENSEMBLE', symbol, side, entry, price, qty, reason)
         
         await self.state.redis.delete(f"ai_ensemble:pos:{symbol}")
+        await self.manager.remove_trade('ai_ensemble', symbol)
         
         # Order Request
         req = {'action': 'CLOSE', 'side': side, 'qty': qty, 'strategy': 'AI_ENSEMBLE'}
