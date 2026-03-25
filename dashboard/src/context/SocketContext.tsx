@@ -75,9 +75,21 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname === 'localhost' ? 'localhost:8000' : window.location.host;
-    const wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${host}/ws`;
+    const getWsUrl = () => {
+      // 1. Explicit environment variable always wins (e.g. from Vercel/Railway env)
+      if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+
+      // 2. Local development fallback
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return 'ws://localhost:8000/ws';
+      }
+
+      // 3. Fallback to current host (assuming same-origin deployment)
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${window.location.host}/ws`;
+    };
+
+    const wsUrl = getWsUrl();
 
     console.log(`🔌 Connecting to WebSocket: ${wsUrl}`);
     const ws = new WebSocket(wsUrl);
