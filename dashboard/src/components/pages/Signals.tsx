@@ -7,6 +7,9 @@ import { Zap, Activity, Info } from 'lucide-react';
 
 const Signals = () => {
   const { data, connected } = useSocket();
+  const safeNumber = (val: any) => typeof val === 'number' ? val : parseFloat(String(val || 0)) || 0;
+  const safeScalar = (val: any) => (typeof val === 'string' || typeof val === 'number') ? val : '';
+  
   const signals = data?.signals || [];
   const fuzzyScores = data?.market?.['BTC/USDT']?.fuzzy || {};
 
@@ -21,7 +24,7 @@ const Signals = () => {
         <div className="flex gap-2">
            <div className="flex items-center gap-2 px-3 py-1 bg-bg-secondary rounded border border-border">
               <span className="text-[10px] font-bold text-text-tertiary uppercase">Confidence</span>
-              <span className="text-[12px] font-mono font-bold text-accent-primary">{(data?.market?.['BTC/USDT']?.confidence || 0).toFixed(1)}%</span>
+              <span className="text-[12px] font-mono font-bold text-accent-primary">{safeNumber(data?.market?.['BTC/USDT']?.confidence).toFixed(1)}%</span>
            </div>
         </div>
       </div>
@@ -45,10 +48,11 @@ const Signals = () => {
                 </div>
                 <div>
                    <h4 className="text-xs font-bold text-text-primary uppercase mb-2">Algorithm Insights</h4>
-                   <p className="text-[12px] text-text-secondary leading-relaxed">
-                     The <span className="text-accent-primary font-bold">Ensemble Voting</span> mechanism combines XGBoost, Random Forest, and Gradient Boosting models. 
-                     The radar chart displays membership scores across 6 key market dimensions. High overlaps indicate strong signal consensus and a Sharpe &gt; 1.8 projection.
-                   </p>
+                    <p className="text-[12px] text-text-secondary leading-relaxed">
+                      The <span className="text-accent-primary font-bold">Ensemble Voting</span> mechanism combines XGBoost, Random Forest, and Gradient Boosting models. 
+                      The radar visualization represents the high-dimensional feature state reduced to the core 6-vector analysis. 
+                      Signals are only emitted when there is a &gt; 75% model consensus and a Sharpe &gt; 1.8 projection.
+                    </p>
                 </div>
              </div>
           </div>
@@ -69,11 +73,11 @@ const Signals = () => {
           {signals.length > 0 ? signals.map((sig, i) => (
             <SignalCard 
               key={i}
-              strategy={sig.strategy} 
-              symbol={sig.symbol} 
-              side={sig.side} 
-              score={sig.score || 0} 
-              confidence={sig.confidence || 0} 
+              strategy={safeScalar(sig.strategy)} 
+              symbol={safeScalar(sig.symbol)} 
+              side={safeScalar(sig.side)} 
+              score={safeNumber(sig.score)} 
+              confidence={safeNumber(sig.confidence)} 
               time={sig.timestamp ? new Date(sig.timestamp).toLocaleTimeString() : '--'} 
             />
           )) : (

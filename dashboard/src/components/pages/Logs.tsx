@@ -31,18 +31,31 @@ const Logs = () => {
     }
   }, [displayLogs, paused]);
 
-  const filteredLogs = displayLogs.filter(log => 
-    log.message.toLowerCase().includes(filter.toLowerCase()) || 
-    log.level.toLowerCase().includes(filter.toLowerCase())
-  );
+  const filteredLogs = displayLogs.filter(log => {
+    if (!log || typeof log.message !== 'string') return false;
+    const msg = log.message.toLowerCase();
+    const level = (log.level || '').toLowerCase();
+    const f = filter.toLowerCase();
+    return msg.includes(f) || level.includes(f);
+  });
 
-  const getLevelColor = (level) => {
-    switch(level) {
+  const getLevelColor = (level: string) => {
+    switch(level?.toUpperCase()) {
       case 'ERROR': return 'text-accent-danger';
       case 'WARNING': return 'text-accent-warning';
       case 'SUCCESS': return 'text-accent-success';
       case 'INFO': return 'text-accent-primary';
       default: return 'text-text-tertiary';
+    }
+  };
+
+  const formatLogTime = (ts: any) => {
+    try {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return '--:--:--';
+      return d.toLocaleTimeString([], { hour12: false });
+    } catch {
+      return '--:--:--';
     }
   };
 
@@ -92,11 +105,11 @@ const Logs = () => {
       {/* Terminal Content */}
       <div className="card flex-1 bg-bg-primary overflow-hidden flex flex-col font-mono text-[12px] border-border/60">
         <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-          {filteredLogs.length > 0 ? filteredLogs.map((log, i) => (
+          {filteredLogs.length > 0 ? filteredLogs.map((log: any, i: number) => (
             <div key={i} className="flex gap-4 mb-2 group hover:bg-bg-tertiary/10 rounded px-2 -ml-2 transition-colors">
-              <span className="text-text-tertiary shrink-0 select-none">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
-              <span className={`w-16 font-black shrink-0 ${getLevelColor(log.level)}`}>{log.level}</span>
-              <span className="text-text-secondary group-hover:text-text-primary"><span className="text-accent-purple">[{log.source}]</span> {log.message}</span>
+              <span className="text-text-tertiary shrink-0 select-none">[{formatLogTime(log.timestamp)}]</span>
+              <span className={`w-16 font-black shrink-0 ${getLevelColor(log.level)}`}>{(log.level || 'INFO').toUpperCase()}</span>
+              <span className="text-text-secondary group-hover:text-text-primary"><span className="text-accent-purple">[{log.source || 'Engine'}]</span> {String(log.message || '')}</span>
             </div>
           )) : (
             <div className="h-full flex flex-col items-center justify-center text-text-tertiary animate-pulse">

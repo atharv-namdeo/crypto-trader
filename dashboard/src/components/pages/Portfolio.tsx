@@ -7,6 +7,9 @@ import { BarChart3, TrendingUp, ShieldAlert, Zap } from 'lucide-react';
 
 const Portfolio = () => {
   const { data } = useSocket();
+  const safeNumber = (val: any) => typeof val === 'number' ? val : parseFloat(String(val || 0)) || 0;
+  const safeScalar = (val: any) => (typeof val === 'string' || typeof val === 'number') ? val : '';
+  
   const portfolio = data?.portfolio || { value: 0, sharpe: 0, drawdown: 0, win_rate: 0, profit_factor: 0, trades: 0 };
   const equityHistory = data?.equity_history || [];
 
@@ -27,7 +30,7 @@ const Portfolio = () => {
     <div className="flex flex-col gap-6 animate-fade-in">
       {/* KPI Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <KPICard title="Total Return" value={(portfolio.value > 0 ? ((portfolio.value - 1000) / 1000 * 100) : 0)} suffix="%" color="blue" />
+        <KPICard title="Total Return" value={safeNumber(portfolio.value) > 0 ? (safeNumber(portfolio.value) - 1000) / 10 / 100 * 100 : 0} suffix="%" color="blue" />
         <KPICard title="Win Rate" value={(portfolio.win_rate || 0) * 100} suffix="%" color="amber" />
         <KPICard title="Sharpe Ratio" value={portfolio.sharpe || 0} color="purple" />
         <KPICard title="Profit Factor" value={portfolio.profit_factor || 0} color="green" />
@@ -52,7 +55,7 @@ const Portfolio = () => {
           <div className="mt-8 grid grid-cols-3 gap-4 border-t border-border pt-6">
              <div className="flex flex-col">
                 <span className="text-[10px] font-bold text-text-tertiary uppercase">Max Drawdown</span>
-                <span className="text-sm font-mono text-accent-danger font-bold mt-1">{(portfolio.drawdown || 0).toFixed(2)}%</span>
+                 <span className="text-sm font-mono text-accent-danger font-bold mt-1">{safeNumber(portfolio.drawdown).toFixed(2)}%</span>
              </div>
              <div className="flex flex-col border-l border-border pl-4">
                 <span className="text-[10px] font-bold text-text-tertiary uppercase">Total Trades</span>
@@ -97,9 +100,9 @@ const Portfolio = () => {
                <div className="w-3 h-3 rounded-[1px] bg-accent-primary animate-pulse" title="Ongoing Session"></div>
              </div>
              <div className="mt-4 flex justify-between items-center text-[11px] text-text-tertiary uppercase font-bold tracking-widest">
-            <span>Current Balance: ${(portfolio.value || 0).toLocaleString()}</span>
-            <span className="text-accent-danger">Max Drawdown: {(portfolio.drawdown || 0).toFixed(2)}%</span>
-            <span className="text-accent-success">Sentiment: {portfolio.sentiment || 'NEUTRAL'}</span>
+             <span>Current Balance: ${safeNumber(portfolio.value || portfolio.total_value).toLocaleString()}</span>
+            <span className="text-accent-danger">Max Drawdown: {safeNumber(portfolio.drawdown).toFixed(2)}%</span>
+            <span className="text-accent-success">Sentiment: {safeScalar(portfolio.sentiment || 'NEUTRAL')}</span>
         </div>
              <div className="mt-4 flex items-center justify-between text-[8px] text-text-tertiary uppercase font-black tracking-widest">
                <span>Last 90 Days</span>

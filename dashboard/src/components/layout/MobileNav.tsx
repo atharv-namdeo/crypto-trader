@@ -23,15 +23,19 @@ const MobileNav = () => {
         <NavLink
           key={item.path}
           to={item.path}
-          className={({ isActive }) => `
-            flex flex-col items-center justify-center gap-1 group
-            ${isActive ? 'text-accent-primary' : 'text-text-tertiary'}
-          `}
+          className="flex-1"
         >
-          <div className={`p-1 rounded-md transition-all ${isActive ? 'bg-accent-primary/10' : 'group-hover:bg-bg-hover'}`}>
-            <item.icon size={20} />
-          </div>
-          <span className="text-[10px] font-bold uppercase tracking-tight">{item.name}</span>
+          {({ isActive }) => (
+            <div className={`
+              flex flex-col items-center justify-center gap-1 group py-1
+              ${isActive ? 'text-accent-primary' : 'text-text-tertiary'}
+            `}>
+              <div className={`p-1 rounded-md transition-all ${isActive ? 'bg-accent-primary/10' : 'group-hover:bg-bg-hover'}`}>
+                <item.icon size={20} />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-tight">{item.name}</span>
+            </div>
+          )}
         </NavLink>
       ))}
     </nav>

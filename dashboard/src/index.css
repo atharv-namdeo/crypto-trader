@@ -50,16 +50,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-tertiary);
+  background: rgba(30, 30, 58, 0.5);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-bright);
+  background: rgba(59, 130, 246, 0.3);
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -93,9 +93,18 @@ body {
 }
 
 .glass {
-  background-color: rgba(255, 255, 255, 0.1);
+  background: rgba(15, 15, 26, 0.7);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(30, 30, 58, 0.5);
+}
+
+.hoverScale {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hoverScale:hover {
+  transform: translateY(-2px);
 }
 
 /* Animations */
