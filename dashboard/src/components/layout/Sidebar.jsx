@@ -13,8 +13,10 @@ import {
   BellRing,
   Power
 } from 'lucide-react';
+import { useSocket } from '../../context/SocketContext';
 
 const Sidebar = () => {
+  const { connected } = useSocket();
   const groups = [
     {
       label: 'OVERVIEW',
