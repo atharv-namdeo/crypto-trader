@@ -24,7 +24,9 @@ export const SocketProvider = ({ children }) => {
     // Determine WS URL based on current environment
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname === 'localhost' ? 'localhost:8000' : window.location.host;
-    const wsUrl = `${protocol}//${host}/ws`;
+    
+    // Prioritize environment variable, fallback to current host
+    const wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${host}/ws`;
 
     console.log(`🔌 Connecting to WebSocket: ${wsUrl}`);
     const ws = new WebSocket(wsUrl);
