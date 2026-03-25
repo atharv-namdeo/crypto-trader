@@ -2,6 +2,7 @@ import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import FileResponse
 import asyncio
 import logging
 import time
@@ -273,5 +274,10 @@ def create_app(state: StateManager):
     import os
     if os.path.exists("dashboard/dist"):
         app.mount("/", StaticFiles(directory="dashboard/dist", html=True), name="static")
+
+        # Fallback for SPA Routing (React Router)
+        @app.exception_handler(404)
+        async def spa_fallback(request, __):
+            return FileResponse("dashboard/dist/index.html")
     
     return app

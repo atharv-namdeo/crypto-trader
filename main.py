@@ -251,7 +251,7 @@ async def main():
     root_log.addHandler(RedisLogHandler(state))
 
     log.info("═" * 60)
-    log.info("🚀 QUANT ENGINE v7.0 | Dashboard Overhaul Active")
+    log.info("🚀 QUANT ENGINE v7.1 | Dashboard Overhaul Active")
     log.info("═" * 60)
 
     # 3. Initialize Settings if missing
