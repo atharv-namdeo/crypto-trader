@@ -187,6 +187,7 @@ def create_app(state: StateManager):
                 sharpe = float(await state.get_float("metrics:sharpe") or 0.0)
                 drawdown = float(await state.get_float("metrics:drawdown") or 0.0)
                 win_rate = float(await state.get_float("metrics:winrate") or 0.0)
+                daily_pnl = float(await state.get_float('pnl:24h') or 0.0)
                 
                 # Derive sentiment from BTC signal
                 btc_sig = market_data.get("BTC/USDT", {}).get("signal", "NEUTRAL")
@@ -195,15 +196,19 @@ def create_app(state: StateManager):
                 elif btc_sig == "SELL": sentiment = "BEAR"
 
                 payload["data"]["portfolio"] = {
-                    "value": total_value,
+                    "total_value": total_value,
+                    "daily_pnl": daily_pnl,
+                    "daily_change_pct": ((daily_pnl / total_value) * 100) if total_value > 0 else 0.0,
                     "sharpe": sharpe,
                     "drawdown": drawdown,
                     "win_rate": win_rate,
                     "profit_factor": float(await state.get_float("metrics:profit_factor") or 1.0),
                     "sentiment": sentiment,
-                    "volatility": 4.2, # Placeholder or calc
-                    "trades": int(await state.get("stats:total_trades") or sum(s['trades'] for s in strategies.values()))
+                    "volatility": 4.2
                 }
+                
+                # 3.1 Status
+                payload["data"]["status"] = await state.get('engine:status') or 'ACTIVE'
                 
                 # 4. Open Positions
                 payload["data"]["positions"] = await state.get("positions:active") or []

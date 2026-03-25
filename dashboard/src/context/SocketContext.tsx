@@ -27,6 +27,8 @@ export interface EngineData {
     win_rate: number; 
     profit_factor: number; 
     sentiment: string;
+    volatility: number;
+    trades: number;
   };
   positions: any[];
   orders: any[];
@@ -53,14 +55,16 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     market: {},
     strategies: {},
     portfolio: { 
-      total_value: 12450.32, 
-      daily_pnl: 312.45, 
-      daily_change_pct: 2.5,
-      sharpe: 1.85, 
+      total_value: 0, 
+      daily_pnl: 0, 
+      daily_change_pct: 0,
+      sharpe: 0, 
       drawdown: 0, 
-      win_rate: 65, 
-      profit_factor: 1.87, 
-      sentiment: 'NEUTRAL' 
+      win_rate: 0,
+      profit_factor: 0,
+      sentiment: 'NEUTRAL',
+      volatility: 0,
+      trades: 0
     },
     positions: [],
     orders: [],
@@ -111,6 +115,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
             return {
               ...prev,
               ...incoming,
+              status: incoming.status || prev.status,
               portfolio: {
                 ...prev.portfolio,
                 ...(incoming.portfolio || {})
