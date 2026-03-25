@@ -1,3 +1,12 @@
+# Stage 1: Build React Dashboard
+FROM node:20-slim AS build-stage
+WORKDIR /app
+COPY dashboard/package*.json ./
+RUN npm install
+COPY dashboard/ ./
+RUN npm run build
+
+# Stage 2: Python Engine
 FROM python:3.10-slim
 
 WORKDIR /app
@@ -19,6 +28,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY . .
 
+# Copy built dashboard from build-stage
+COPY --from=build-stage /app/dist /app/dashboard/dist
+
 # Create necessary directories
 RUN mkdir -p logs reports ml/models
 
@@ -26,7 +38,7 @@ RUN mkdir -p logs reports ml/models
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD python -c "import sys; sys.exit(0)" || exit 1
 
-# Expose port
+# Expose port (FastAPI usually runs on 8000 or 8080)
 EXPOSE 8000
 
 # Run application

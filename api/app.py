@@ -1,5 +1,6 @@
 import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, Depends
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import logging
@@ -268,4 +269,9 @@ def create_app(state: StateManager):
         except Exception as e:
             log.error(f"WS push error: {e}")
 
+    # --- DASHBOARD SERVING ---
+    import os
+    if os.path.exists("dashboard/dist"):
+        app.mount("/", StaticFiles(directory="dashboard/dist", html=True), name="static")
+    
     return app
