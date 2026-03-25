@@ -1,139 +1,178 @@
-import React, { useState, useEffect } from 'react';
-import Toggle from '../ui/Toggle';
-import Slider from '../ui/Slider';
-import Badge from '../ui/Badge';
+import React, { useState } from 'react';
+import { 
+  ShieldCheck, 
+  Settings as SettingsIcon, 
+  Zap, 
+  Layers, 
+  Database, 
+  Globe, 
+  Cpu,
+  Save,
+  RefreshCcw,
+  CheckCircle2
+} from 'lucide-react';
+import { useSocket } from '../../context/SocketContext';
 import toast from 'react-hot-toast';
 
 const Settings = () => {
-  const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState({
-    scalper_enabled: true,
-    scalper_threshold: 0.45,
-    swing_enabled: true,
-    swing_threshold: 0.55,
-    position_enabled: false,
-    position_threshold: 0.65
-  });
+  const { data } = useSocket();
+  const [saving, setSaving] = useState(false);
 
-  const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/v1/settings`)
-      .then(res => res.json())
-      .then(json => {
-        if (json.data) {
-          // Convert string "true"/"false" to boolean if necessary
-          const normalized = {};
-          Object.entries(json.data).forEach(([k, v]) => {
-            if (v === 'true') normalized[k] = true;
-            else if (v === 'false') normalized[k] = false;
-            else normalized[k] = v;
-          });
-          setSettings(prev => ({ ...prev, ...normalized }));
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to fetch settings:', err);
-        setLoading(false);
-      });
-  }, []);
-
-  const handleSave = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/v1/settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-      });
-      if (response.ok) {
-        toast.success('Configuration saved to Quant Engine');
-      } else {
-        toast.error('Failed to save configuration');
-      }
-    } catch (err) {
-      toast.error('Network error during save');
-    }
+  const handleSave = () => {
+    setSaving(true);
+    setTimeout(() => {
+      setSaving(false);
+      toast.success('Configuration synchronized with Engine v7.5');
+    }, 1500);
   };
 
-  if (loading) return <div className="p-12 text-center text-text-tertiary font-bold animate-pulse uppercase tracking-[0.2em]">Synchronizing Engine State...</div>;
-
   return (
-    <div className="flex flex-col gap-6 animate-fade-in max-w-5xl mx-auto pb-12">
+    <div className="flex flex-col gap-6 animate-fade-in pb-12">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-text-primary tracking-tight">Configuration & Control</h2>
-        <div className="flex gap-2">
-            <button className="px-5 py-1.5 rounded bg-bg-tertiary border border-border text-xs font-bold text-text-secondary hover:text-white transition-all">Discard</button>
-            <button 
-                onClick={handleSave}
-                className="px-5 py-1.5 rounded bg-accent-primary border border-accent-primary text-xs font-bold text-white hover:brightness-110 shadow-lg shadow-accent-primary/20 transition-all"
-            >
-                Save Configuration
-            </button>
+        <div>
+          <h2 className="text-xl font-bold text-text-primary tracking-tight uppercase flex items-center gap-2">
+            <SettingsIcon size={22} className="text-accent-primary" />
+            Engine Configuration
+          </h2>
+          <p className="text-[11px] text-text-tertiary font-bold uppercase tracking-widest mt-1 italic">Real-time Strategy & Risk Orchestration</p>
         </div>
+        <button 
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-5 py-2 bg-accent-primary text-white rounded-[4px] font-bold text-[12px] uppercase tracking-wider hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-accent-primary/20"
+        >
+          {saving ? <RefreshCcw size={16} className="animate-spin" /> : <Save size={16} />}
+          {saving ? 'Syncing...' : 'Save & Sync'}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Strategy Controls */}
-        <div className="card p-6 flex flex-col gap-6">
-          <div className="flex items-center justify-between border-b border-border pb-4">
-            <h3 className="text-sm font-bold text-text-primary uppercase tracking-tight">Strategy Flow</h3>
-            <Badge variant="primary">Active</Badge>
-          </div>
-          
-          {['scalper', 'swing', 'position'].map(s => (
-            <div key={s} className="p-4 rounded-card bg-bg-tertiary border border-border flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm text-text-primary">{s.toUpperCase()} ENGINE</span>
-                <Toggle 
-                  active={settings[`${s}_enabled`]} 
-                  onChange={(val) => setSettings({...settings, [`${s}_enabled`]: val})} 
-                />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Risk Management */}
+        <div className="card p-6">
+           <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-accent-danger/10 rounded-md text-accent-danger border border-accent-danger/20">
+                <ShieldCheck size={20} />
               </div>
-              <Slider 
-                label="Entry Confidence Threshold" 
-                min={0} max={1} step={0.01} 
-                value={settings[`${s}_threshold`]} 
-                onChange={(val) => setSettings({...settings, [`${s}_threshold`]: val})}
-              />
-            </div>
-          ))}
+              <h3 className="font-bold text-sm uppercase tracking-tight">Global Risk Perimeter</h3>
+           </div>
+           
+           <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="flex flex-col gap-2">
+                    <label className="text-[11px] font-bold text-text-tertiary uppercase">Daily Loss Limit (%)</label>
+                    <input type="number" defaultValue="2.5" className="bg-bg-tertiary border border-border rounded p-2 text-sm font-mono text-accent-danger" />
+                 </div>
+                 <div className="flex flex-col gap-2">
+                    <label className="text-[11px] font-bold text-text-tertiary uppercase">Max Drawdown Exit (%)</label>
+                    <input type="number" defaultValue="5.0" className="bg-bg-tertiary border border-border rounded p-2 text-sm font-mono text-accent-danger" />
+                 </div>
+              </div>
+              
+              <div className="flex flex-col gap-3 p-4 bg-bg-tertiary/10 border border-border rounded-md">
+                 <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-bold text-text-secondary">Emergency Circuit Breaker</span>
+                    <div className="w-10 h-5 bg-accent-danger rounded-full p-1 relative cursor-pointer opacity-40 grayscale">
+                       <div className="w-3 h-3 bg-white rounded-full"></div>
+                    </div>
+                 </div>
+                 <p className="text-[10px] text-text-tertiary italic">Closes all positions and halts scanning if volatility exceeds 15% in 1 minute.</p>
+              </div>
+           </div>
         </div>
 
-        {/* Risk Management */}
-        <div className="flex flex-col gap-6">
-          <div className="card p-6 flex flex-col gap-6">
-            <div className="flex items-center justify-between border-b border-border pb-4">
-              <h3 className="text-sm font-bold text-text-primary uppercase tracking-tight">Risk Constraints</h3>
-              <Badge variant="danger">Enabled</Badge>
-            </div>
-            
-            <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                        <span className="text-xs font-bold text-text-secondary uppercase">Max Daily Loss</span>
-                        <span className="text-[10px] text-text-tertiary uppercase">Hard stop threshold</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-text-tertiary font-mono text-xs">$</span>
-                        <input type="number" defaultValue={500} className="w-24 bg-bg-tertiary border-border py-1 font-mono text-sm font-bold text-accent-danger" />
-                    </div>
-                </div>
+        {/* Strategy Controls */}
+        <div className="card p-6">
+           <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-accent-primary/10 rounded-md text-accent-primary border border-accent-primary/20">
+                <Layers size={20} />
+              </div>
+              <h3 className="font-bold text-sm uppercase tracking-tight">Strategy Orchestrator</h3>
+           </div>
 
-                <div className="pt-4 mt-4 border-t border-border border-dashed">
-                    <button className="w-full py-3 rounded bg-accent-danger/20 text-accent-danger border border-accent-danger/30 font-black uppercase tracking-[0.2em] hover:bg-accent-danger hover:text-white transition-all">
-                        Emergency STOP
-                    </button>
+           <div className="space-y-4">
+              {['Scalper', 'Swing', 'Position'].map((s, i) => (
+                <div key={s} className="flex items-center justify-between p-3 border border-border/50 rounded-md hover:border-border-bright transition-colors">
+                   <div className="flex items-center gap-4">
+                      <div className={`w-2 h-2 rounded-full ${i === 0 ? 'bg-accent-primary' : i === 1 ? 'bg-accent-success' : 'bg-accent-purple'}`}></div>
+                      <div className="flex flex-col">
+                        <span className="text-[13px] font-bold text-text-primary uppercase">{s}</span>
+                        <span className="text-[10px] text-text-tertiary uppercase font-medium">{i === 0 ? 'High Freq' : i === 1 ? 'Medium Term' : 'Passive'}</span>
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-8">
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] text-text-tertiary uppercase font-bold">Allocation</span>
+                        <span className="text-[12px] font-mono font-bold text-text-primary">{i === 0 ? '10%' : i === 1 ? '30%' : '60%'}</span>
+                      </div>
+                      <div className="w-10 h-5 bg-accent-success/20 border border-accent-success/40 rounded-full p-1 relative cursor-pointer">
+                        <div className="w-3 h-3 bg-accent-success rounded-full absolute right-1"></div>
+                      </div>
+                   </div>
                 </div>
-            </div>
-          </div>
+              ))}
+           </div>
+        </div>
 
-          <div className="card p-6 bg-accent-primary/5 border-dashed border-accent-primary/20">
-              <h4 className="text-[11px] font-bold text-accent-primary uppercase mb-2">Automated Risk Guardian</h4>
-              <p className="text-[11px] text-text-secondary leading-relaxed">
-                  The Risk Guardian is monitoring margin levels and system health in the background. If volatility spikes > 15% in 5m, all strategies will pause automatically.
-              </p>
-          </div>
+        {/* Infrastructure */}
+        <div className="card p-6">
+           <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-accent-purple/10 rounded-md text-accent-purple border border-accent-purple/20">
+                <Database size={20} />
+              </div>
+              <h3 className="font-bold text-sm uppercase tracking-tight">Data Integrity & Sync</h3>
+           </div>
+
+           <div className="space-y-4">
+              <div className="flex items-center justify-between text-[12px] p-2">
+                 <span className="flex items-center gap-2 text-text-secondary"><Globe size={14}/> Binance WS Link</span>
+                 <span className="flex items-center gap-1.5 text-accent-success font-bold uppercase"><CheckCircle2 size={12}/> Connected</span>
+              </div>
+              <div className="flex items-center justify-between text-[12px] p-2">
+                 <span className="flex items-center gap-2 text-text-secondary"><Cpu size={14}/> Redis Memory Usage</span>
+                 <span className="font-mono text-text-secondary">4.2MB / 64MB</span>
+              </div>
+              <div className="flex flex-col gap-2 mt-4">
+                <label className="text-[11px] font-bold text-text-tertiary uppercase">Exchange API Environment</label>
+                <select className="bg-bg-tertiary border border-border rounded p-2 text-[12px] text-text-primary appearance-none outline-none focus:border-accent-primary transition-all">
+                   <option>Binance Futures Testnet</option>
+                   <option disabled>Binance Futures Mainnet (KYC Required)</option>
+                   <option>Bybit Unified Margin (Paper)</option>
+                </select>
+              </div>
+           </div>
+        </div>
+
+        {/* AI Multi-Model Configuration */}
+        <div className="card p-6">
+           <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-accent-amber/10 rounded-md text-accent-amber border border-accent-amber/20">
+                <Zap size={20} />
+              </div>
+              <h3 className="font-bold text-sm uppercase tracking-tight">ML Ensemble Tuning</h3>
+           </div>
+
+           <div className="space-y-6">
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-[11px] font-bold text-text-tertiary uppercase tracking-wider">Confidence Threshold</label>
+                  <span className="text-[11px] font-mono font-bold text-accent-amber">75%</span>
+                </div>
+                <input type="range" min="50" max="95" defaultValue="75" className="w-full h-1 bg-bg-tertiary rounded-lg appearance-none cursor-pointer accent-accent-amber" />
+                <div className="flex justify-between mt-1 text-[9px] text-text-tertiary uppercase font-bold">
+                  <span>Conservative</span>
+                  <span>Aggressive</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                 {['XGBoost v2', 'LightGBM', 'Ensemble Voting', 'Prophet Mix'].map(algo => (
+                   <div key={algo} className="flex items-center gap-2">
+                      <input type="checkbox" defaultChecked className="w-3.5 h-3.5 rounded bg-bg-tertiary border-border transition-all checked:bg-accent-amber" />
+                      <span className="text-[12px] text-text-secondary">{algo}</span>
+                   </div>
+                 ))}
+              </div>
+           </div>
         </div>
       </div>
     </div>

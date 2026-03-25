@@ -27,8 +27,8 @@ const SignalCard = ({ strategy, symbol, side, score, confidence, time }) => {
 
       <div className="flex items-center justify-between text-[11px] mb-1">
         <div className="flex gap-3">
-          <span className="text-text-tertiary uppercase font-bold tracking-tighter">Score: <span className="text-text-secondary font-mono">{score.toFixed(2)}</span></span>
-          <span className="text-text-tertiary uppercase font-bold tracking-tighter">Conv: <span className="text-text-secondary font-mono">{confidence.toFixed(2)}</span></span>
+          <span className="text-text-tertiary uppercase font-bold tracking-tighter">Score: <span className="text-text-secondary font-mono">{(score || 0).toFixed(2)}</span></span>
+          <span className="text-text-tertiary uppercase font-bold tracking-tighter">Conv: <span className="text-text-secondary font-mono">{(confidence || 0).toFixed(2)}</span></span>
         </div>
         <span className="text-text-tertiary font-mono">{time}</span>
       </div>

@@ -49,7 +49,7 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="sidebar fixed left-0 top-[48px] w-[220px] h-[calc(100vh-48px)] bg-primary border-r border flex flex-col p-4 z-40">
+    <aside className="sidebar fixed left-0 top-[48px] w-[220px] h-[calc(100vh-48px)] bg-bg-secondary border-r border-border flex flex-col p-4 z-40">
       <div className="flex-1 overflow-y-auto no-scrollbar">
         {groups.map((group, idx) => (
           <div key={idx} className="mb-6">
@@ -74,16 +74,19 @@ const Sidebar = () => {
       </div>
 
       <div className="mt-auto pt-4 border-t border-border">
-        <div className="status-card bg-bg-secondary p-3 rounded-card border border-border">
+        <div className="status-card bg-bg-tertiary p-3 rounded-md border border-border">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-text-secondary uppercase">Running</span>
-            <div className="w-2 h-2 rounded-full bg-accent-success animate-pulse"></div>
+            <span className="text-[11px] font-bold text-text-secondary uppercase tracking-tight">System Status</span>
+            <div className={`w-2 h-2 rounded-full ${connected ? 'bg-accent-success' : 'bg-accent-danger'} animate-pulse`}></div>
           </div>
           <div className="flex items-center gap-2 mb-1">
              <span className="bg-accent-warning/10 text-accent-warning text-[10px] px-1.5 py-0.5 rounded border border-accent-warning/20 font-bold uppercase">Paper</span>
-             <span className="text-[11px] font-mono text-text-tertiary">v7.0 Stable</span>
+             <span className="text-[11px] font-mono text-text-tertiary uppercase tracking-tighter">v7.5 Engine @ IST</span>
           </div>
-          <div className="text-[11px] text-text-secondary font-mono">Uptime: 4h 23m</div>
+          <div className="text-[11px] text-text-secondary font-mono flex items-center justify-between">
+            <span>Uptime:</span>
+            <span>4h 23m</span>
+          </div>
         </div>
       </div>
     </aside>

@@ -1,56 +1,56 @@
 import React from 'react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ReferenceLine } from 'recharts';
 
-const SignalHeatmap = () => {
-  const indicators = ['RSI', 'VWAP', 'MACD', 'Volume', 'ADX', 'PSAR', 'BB', 'EMA'];
-  const hours = Array.from({ length: 24 }, (_, i) => i);
-  
-  // Generate mock data for the heatmap
-  const getCellColor = (strength) => {
-    if (strength > 0.7) return 'bg-[#10b981]'; // Strong buy
-    if (strength > 0.4) return 'bg-[#6ee7b7]'; // Weak buy
-    if (strength < -0.7) return 'bg-[#ef4444]'; // Strong sell
-    if (strength < -0.4) return 'bg-[#fca5a5]'; // Weak sell
-    return 'bg-[#1e1e3a]'; // Neutral
-  };
+const SignalHeatmap = ({ data = [] }) => {
+  // Mocking 24h data if empty
+  const chartData = data.length > 0 ? data : Array.from({ length: 24 }, (_, i) => ({
+    hour: `${i}h`,
+    score: (Math.random() - 0.5) * 200,
+    volume: Math.random() * 100
+  }));
 
   return (
-    <div className="flex flex-col gap-4 mt-4">
-      <div className="overflow-x-auto no-scrollbar">
-        <div className="min-w-[600px]">
-          <div className="flex mb-2">
-            <div className="w-20"></div>
-            <div className="flex-1 flex justify-between px-2 text-[9px] font-bold text-text-tertiary">
-              {hours.map(h => <span key={h} className="w-4 text-center">{h}h</span>)}
-            </div>
-          </div>
-          
-          {indicators.map(indicator => (
-            <div key={indicator} className="flex items-center mb-1">
-              <div className="w-20 text-[10px] font-bold text-text-secondary uppercase">{indicator}</div>
-              <div className="flex-1 flex justify-between gap-1 px-1">
-                {hours.map(h => {
-                  const strength = (Math.random() - 0.5) * 2;
-                  return (
-                    <div 
-                      key={h} 
-                      className={`h-4 flex-1 rounded-sm ${getCellColor(strength)}`}
-                      title={`${indicator} at ${h}:00 -> ${strength.toFixed(2)}`}
-                    ></div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+    <div className="card p-6 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-sm font-bold text-text-primary uppercase tracking-tight">Signal Distribution (24h)</h3>
+        <div className="flex gap-4">
+          <span className="text-[10px] text-accent-success font-bold uppercase tracking-widest">Bullish</span>
+          <span className="text-[10px] text-accent-danger font-bold uppercase tracking-widest">Bearish</span>
         </div>
       </div>
-      
-      <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-          <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#10b981]"></div><span className="text-[10px] text-text-tertiary font-bold uppercase">Strong Buy</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#1e1e3a]"></div><span className="text-[10px] text-text-tertiary font-bold uppercase">Neutral</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#ef4444]"></div><span className="text-[10px] text-text-tertiary font-bold uppercase">Strong Sell</span></div>
-          </div>
-          <div className="text-[11px] text-text-secondary italic font-medium">Updating every 30s</div>
+
+      <div className="flex-1 min-h-[250px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <XAxis 
+              dataKey="hour" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fill: '#475569', fontSize: 10, fontWeight: 600 }} 
+            />
+            <YAxis hide domain={[-100, 100]} />
+            <Tooltip 
+              cursor={{ fill: '#1a1a35', opacity: 0.4 }}
+              contentStyle={{ background: '#0f0f1a', border: '1px solid #1e1e3a', borderRadius: '4px', fontSize: '11px' }}
+            />
+            <ReferenceLine y={0} stroke="#1e1e3a" />
+            <Bar dataKey="score" radius={[2, 2, 0, 0]}>
+              {chartData.map((entry, index) => (
+                <Cell 
+                  key={`cell-${index}`} 
+                  fill={entry.score >= 0 ? '#10b981' : '#ef4444'} 
+                  fillOpacity={Math.abs(entry.score) / 100 + 0.2} 
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between text-[10px] text-text-tertiary font-bold uppercase tracking-widest border-t border-border pt-4">
+        <span>-24h</span>
+        <span>Current Intensity</span>
+        <span>Now</span>
       </div>
     </div>
   );

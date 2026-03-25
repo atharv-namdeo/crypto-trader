@@ -15,13 +15,13 @@ const KPICard = ({ title, value, subValue, trend, trendValue, color = 'blue', pr
     <div className={`card p-4 flex flex-col justify-between border-t-2 ${borderColors[color] || borderColors.blue}`}>
       <div>
         <h3 className="text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-2">{title}</h3>
-        <div className="flex items-baseline gap-1 font-mono text-2xl font-bold text-text-primary">
-          <span>{prefix}</span>
-          <CountUp end={value} decimals={decimals} duration={2} separator="," />
-          <span>{suffix}</span>
-        </div>
+          <span className="font-mono font-bold text-text-primary text-2xl">
+            <span>{prefix}</span>
+            <CountUp end={value || 0} decimals={decimals} duration={2} separator="," />
+            <span>{suffix}</span>
+          </span>
       </div>
-      
+
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-text-tertiary">{subValue}</span>
         {trendValue && (

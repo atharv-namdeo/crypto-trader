@@ -24,30 +24,29 @@ const App = () => {
   return (
     <SocketProvider>
       <Router>
-        <div className="app-container min-h-screen bg-bg-primary text-text-primary flex flex-col">
+        <div className="app-container min-h-screen bg-bg-primary text-text-primary flex flex-col font-sans selection:bg-accent-primary/30">
           <Toaster 
             position="bottom-right"
             toastOptions={{
               style: {
-                background: '#141428',
+                background: '#0f0f1a',
                 color: '#f1f5f9',
                 border: '1px solid #1e1e3a',
-                fontSize: '13px',
-                borderRadius: '6px'
+                fontSize: '12px',
+                borderRadius: '4px',
+                padding: '12px 16px'
               }
             }}
           />
           
           <TopBar />
           
-          <div className="flex flex-1">
-            <div className="hidden md:block">
-              <Sidebar />
-            </div>
+          <div className="flex flex-1 overflow-hidden">
+            <Sidebar />
             
-            <main className="flex-1 md:ml-[220px] mt-[48px] p-6 pb-24 md:pb-6 min-h-[calc(100vh-48px)] overflow-x-hidden">
-              <div className="max-w-[1600px] mx-auto">
-                  <Routes>
+            <main className="flex-1 md:ml-[220px] mt-[48px] overflow-y-auto overflow-x-hidden relative scroll-smooth bg-bg-primary">
+              <div className="p-4 md:p-6 pb-24 md:pb-8 max-w-[1600px] mx-auto min-h-full">
+                <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/trading" element={<Trading />} />
                   <Route path="/signals" element={<Signals />} />
@@ -57,9 +56,11 @@ const App = () => {
                   <Route path="/alerts" element={<Alerts />} />
                   <Route path="/risk" element={<Risk />} />
                   <Route path="/backtester" element={<Backtester />} />
-                  </Routes>
+                </Routes>
               </div>
             </main>
+            
+            {/* Optional Right Panel could be injected here */}
           </div>
 
           <MobileNav />

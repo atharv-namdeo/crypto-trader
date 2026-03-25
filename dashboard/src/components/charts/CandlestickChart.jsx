@@ -17,7 +17,7 @@ const CandlestickBar = (props) => {
   const isGreen = close >= open;
   const color = isGreen ? '#10b981' : '#ef4444';
   
-  // Scale function provided by Recharts for the Y axis
+  // Use the Y-axis scale passed through props from Recharts
   const scale = props.yAxis.scale;
   
   const yHigh = scale(high);

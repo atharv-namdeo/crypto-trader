@@ -41,6 +41,7 @@ from execution.pre_launch_validator import PreLaunchValidator
 from execution.graduated_rollout import GraduatedRollout
 from execution.alert_system import AlertSystem, monitor_critical_metrics
 from core.multi_strategy_manager import MultiStrategyManager
+from core.dashboard_sync import DashboardSynchronizer
 
 from core.telegram_notifier import TelegramNotifier
 telegram = TelegramNotifier()
@@ -80,38 +81,7 @@ async def start_api_server(state: StateManager):
     server = uvicorn.Server(config)
     await server.serve()
 
-async def sync_dashboard(state: StateManager):
-    """Sync live Binance portfolio to Firebase every 60s with retry logic."""
-    from utils.firebase_client import log_equity, log_balance
-    while True:
-        try:
-            acc = await state.get('binance:account')
-            total_equity = float(CAPITAL)
-            assets = [{"asset": "USDT", "balance": total_equity}]
-            
-            if acc:
-                total_equity = float(acc.get('totalWalletBalance', 0)) + float(acc.get('totalUnrealizedProfit', 0))
-                found_assets = []
-                for a in acc.get('assets', []):
-                    bal = float(a.get('walletBalance', 0))
-                    if bal > 0:
-                        found_assets.append({"asset": a['asset'], "balance": bal})
-                if found_assets:
-                    assets = found_assets
-
-            # Protective wrappers for Firebase calls
-            try: log_equity(total_equity)
-            except Exception as fe: log.error(f"Firebase Equity Log Error: {fe}")
-            
-            try: log_balance(assets)
-            except Exception as fb: log.error(f"Firebase Balance Log Error: {fb}")
-            
-        except Exception as e:
-            log.warning(f"Could not sync portfolio to dashboard: {e}")
-            await asyncio.sleep(10) # Back off a bit on error
-            continue
-            
-        await asyncio.sleep(60)
+# Legacy sync_dashboard replaced by DashboardSynchronizer
 
 async def daily_summary_loop(state: StateManager):
     """Nightly performance report for Telegram."""
@@ -282,6 +252,7 @@ async def main():
     ml_predictor = ParallelMLPredictor(state)
     perf_monitor = PerformanceMonitor()
     signal_tracker = SignalQualityTracker(state)
+    dash_sync = DashboardSynchronizer(state)
     
     # --- PHASE 7: EXECUTION TOOLS ---
     alert_system = AlertSystem(state)
@@ -348,7 +319,7 @@ async def main():
     # 6. Create Coroutines
     tasks = [
         api_task,
-        asyncio.create_task(sync_dashboard(state), name="DASH_SYNC"),
+        asyncio.create_task(dash_sync.run_loop(interval=1), name="DASH_SYNC"),
         asyncio.create_task(risk_manager.run_loop(interval=1), name="RISK_MGR"),
         asyncio.create_task(risk_guardian.run_loop(interval=60), name="RISK_GTD"),
         asyncio.create_task(order_engine.run_loop(interval=1), name="ORDER_ENG"),
@@ -382,7 +353,7 @@ async def main():
 
     # Graceful shutdown handler
     loop = asyncio.get_event_loop()
-    components = [ws_feed, data_manager, features, risk_guardian, order_engine, scalper, swing, position]
+    components = [ws_feed, data_manager, features, risk_guardian, order_engine, scalper, swing, position, dash_sync]
     for sig in (signal.SIGINT, signal.SIGTERM):
         with suppress(NotImplementedError):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(tasks, *components)))

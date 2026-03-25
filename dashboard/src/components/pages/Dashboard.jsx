@@ -9,7 +9,7 @@ import { useSocket } from '../../context/SocketContext';
 const Dashboard = () => {
   const { data, connected } = useSocket();
 
-  const portfolio = data?.portfolio || { value: 0, sharpe: 0, drawdown: 0, win_rate: 0 };
+  const portfolio = data?.portfolio || { value: 0, sharpe: 0, drawdown: 0, win_rate: 0, profit_factor: 0 };
   const marketBTC = data?.market?.['BTC/USDT'] || { price: 0, change: 0 };
   const strategies = data?.strategies || {};
   const signals = data?.signals || [];
@@ -20,22 +20,22 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <KPICard 
           title="Portfolio Value" 
-          value={portfolio.value} 
-          subValue={`≈ ₹${(portfolio.value * 84).toLocaleString()}`} 
-          trend={portfolio.value >= 1000 ? "up" : "down"} 
+          value={portfolio.value || 0} 
+          subValue={`≈ ₹${((portfolio.value || 0) * 84).toLocaleString()}`} 
+          trend={(portfolio.value || 0) >= 1000 ? "up" : "down"} 
           trendValue={connected ? "LIVE" : "OFFLINE"}
           prefix="$" 
           color="blue" 
         />
         <KPICard 
           title="24h Change" 
-          value={marketBTC.change} 
+          value={marketBTC.change || 0} 
           suffix="%" 
-          color={marketBTC.change >= 0 ? "green" : "red"} 
+          color={(marketBTC.change || 0) >= 0 ? "green" : "red"} 
         />
         <KPICard 
           title="Win Rate" 
-          value={portfolio.win_rate * 100} 
+          value={(portfolio.win_rate || 0) * 100} 
           suffix="%" 
           color="amber" 
         />
@@ -47,7 +47,7 @@ const Dashboard = () => {
         />
         <KPICard 
           title="Sharpe Ratio" 
-          value={portfolio.sharpe} 
+          value={portfolio.sharpe || 0} 
           subValue="Rolling 24h" 
           color="cyan" 
         />
@@ -77,7 +77,7 @@ const Dashboard = () => {
                 side={sig.side} 
                 score={sig.score || 0} 
                 confidence={sig.confidence || 0} 
-                time={new Date(sig.timestamp).toLocaleTimeString()} 
+                time={sig.timestamp ? new Date(sig.timestamp).toLocaleTimeString() : '--'} 
               />
             )) : (
               <div className="text-center text-text-tertiary py-8 italic">Waiting for signals...</div>
@@ -99,7 +99,7 @@ const Dashboard = () => {
               capital={200} 
               trades={sData.trades} 
               winRate={winRate} 
-              pnl={sData.pnl.toFixed(2)} 
+              pnl={(sData.pnl || 0).toFixed(2)} 
               avgHold="--" 
               utilization={sData.pos_count > 0 ? 100 : 0} 
             />
@@ -109,8 +109,8 @@ const Dashboard = () => {
 
       {/* Row 4: Risk Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pb-8">
-        <RiskCard title="Profit Factor" value={portfolio.profit_factor.toFixed(2)} subValue="Target > 2.0" trend="up" color="green" />
-        <RiskCard title="Max Drawdown" value={`${portfolio.drawdown.toFixed(2)}%`} subValue="Limit 5%" trend="down" color="red" />
+        <RiskCard title="Profit Factor" value={(portfolio.profit_factor || 0).toFixed(2)} subValue={`Target ${'>'} 2.0`} trend="up" color="green" />
+        <RiskCard title="Max Drawdown" value={`${(portfolio.drawdown || 0).toFixed(2)}%`} subValue="Limit 5%" trend="down" color="red" />
         <RiskCard title="Volatility (30d)" value="4.2%" subValue="Historical avg" trend="up" color="amber" />
         <RiskCard title="Liquidity Risk" value="Low" subValue="Slippage < 0.1%" trend="up" color="blue" />
       </div>

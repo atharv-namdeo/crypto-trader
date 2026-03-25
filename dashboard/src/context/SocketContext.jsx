@@ -8,12 +8,15 @@ export const SocketProvider = ({ children }) => {
   const [data, setData] = useState({
     market: {},
     strategies: {},
-    portfolio: { value: 0, sharpe: 0, drawdown: 0, win_rate: 0 },
+    portfolio: { value: 0, sharpe: 0, drawdown: 0, win_rate: 0, profit_factor: 0, sentiment: 'NEUTRAL' },
     positions: [],
+    orders: [],
+    trades: [],
     logs: [],
     equity_history: [],
     signals: [],
-    latest_candles: []
+    latest_candles: [],
+    signal_heatmap: []
   });
   const [connected, setConnected] = useState(false);
 

@@ -118,7 +118,8 @@ def create_app(state: StateManager):
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
         await websocket.accept()
-        log.info(f"Dashboard WS connected")
+        log.info(f"✅ Dashboard WS connected")
+        
         try:
             while True:
                 if not state.redis:
@@ -130,145 +131,139 @@ def create_app(state: StateManager):
                 
                 # 1. Market Data
                 market_data = {}
-                for symbol in ["BTC/USDT", "ETH/USDT"]:
+                for symbol in ["BTC/USDT", "ETH/USDT", "SOL/USDT"]:
                     price = float(await state.get_float(f"price:{symbol}") or 0.0)
-                    
-                    # Calculate 24h change
                     change_24h = 0.0
                     df_24h = await state.get_df(f"ohlcv:1h:{symbol}", n=24)
                     if df_24h is not None and not df_24h.empty:
                         open_24h = float(df_24h.iloc[0]['close'])
                         if open_24h > 0:
                             change_24h = ((price - open_24h) / open_24h) * 100
-                            
+                    
+                    # Get ML prediction details
+                    ml_data = await state.get(f"ml_signal:{symbol}") or {}
+                    if isinstance(ml_data, str):
+                        try: ml_data = json.loads(ml_data)
+                        except: ml_data = {}
+                    
                     market_data[symbol] = {
                         "price": price,
                         "change": change_24h,
                         "funding": float(await state.get_float(f"funding:{symbol}") or 0.0),
                         "fuzzy": await state.get(f"fuzzy_scores:{symbol}") or {},
+                        "signal": ml_data.get('signal', 'NEUTRAL'),
+                        "confidence": ml_data.get('confidence', 0.0) * 100, # Convert to pct
                         "candles": {
-                            tf: (await state.get_df(f"ohlcv:{tf}:{symbol}", n=1)).to_dict(orient='records') if (state.redis and await state.redis.exists(f"ohlcv:{tf}:{symbol}")) else []
+                            tf: (await state.get_df(f"ohlcv:{tf}:{symbol}", n=1)).to_dict(orient='records') 
+                            if (state.redis and await state.redis.exists(f"ohlcv:{tf}:{symbol}")) else []
                             for tf in ["1m", "5m", "15m", "1h", "4h"]
                         }
                     }
-                    
-                    # 1.1 ML Ensemble Signals
-                    ml_sig = await state.get(f"ml_signal:{symbol}")
-                    if ml_sig:
-                        if isinstance(ml_sig, str):
-                            try: ml_sig = json.loads(ml_sig)
-                            except: pass
-                        
-                        # Send as separate message for the MLSignalPanel component
-                        await websocket.send_json({
-                            "type": "ML_UPDATE",
-                            "symbol": symbol,
-                            "signal": ml_sig.get('signal'),
-                            "confidence": ml_sig.get('confidence'),
-                            "latency": ml_sig.get('latency', 84) # fallback
-                        })
                 payload["data"]["market"] = market_data
                 
-                # 1.2 Signal Quality History
-                sq_history = await state.redis.lrange('signal_quality:history', 0, 0)
-                if sq_history:
-                    sq = json.loads(sq_history[0])
-                    await websocket.send_json({
-                        "type": "SIGNAL_QUALITY",
-                        "symbol": sq['symbol'] if 'symbol' in sq else "BTC/USDT",
-                        "accuracy": sq['accuracy']
-                    })
+                # Signal Heatmap (mock or real distribution)
+                payload["data"]["signal_heatmap"] = await state.get("ml:signal_heatmap") or []
                 
-                # 1.3 Rollout Status
-                rollout_phase = await state.get('rollout:current_phase') or 'PHASE_1_MICRO'
-                rollout_start = await state.get_float('rollout:phase_start_time') or 0.0
-                await websocket.send_json({
-                    "type": "ROLLOUT_UPDATE",
-                    "phase": rollout_phase,
-                    "elapsed_days": round((time.time() - rollout_start) / 86400, 1) if rollout_start > 0 else 0
-                })
-                
-                # Push latest candle to chart if needed
-                payload["data"]["latest_candles"] = market_data["BTC/USDT"]["candles"]
-
                 # 2. Strategy Stats
-                stats = {}
+                strategies = {}
                 for s in ["scalper", "swing", "position", "ai_ensemble"]:
-                    # pos_count: Count active position keys in Redis
-                    pos_keys = await state.redis.keys(f"{s}:pos:*") if state.redis else []
-                    stats[s] = {
-                        "trades": int(await state.get(f"stats:{s}:trades") or 0),
-                        "wins": int(await state.get(f"stats:{s}:wins") or 0),
-                        "pnl": float(await state.get(f"stats:{s}:pnl") or 0.0),
-                        "pos_count": len(pos_keys),
-                        "status": "ACTIVE" if pos_keys else "SCANNING"
+                    pos_count = int(await state.get(f"stats:{s}:pos_count") or 0)
+                    pnl = float(await state.get_float(f"stats:{s}:pnl") or 0.0)
+                    trades = int(await state.get(f"stats:{s}:trades") or 0)
+                    wins = int(await state.get(f"stats:{s}:wins") or 0)
+                    win_rate = (wins / trades * 100) if trades > 0 else 0.0
+                    
+                    strategies[s] = {
+                        "pos_count": pos_count,
+                        "pnl": pnl,
+                        "win_rate": win_rate,
+                        "trades": trades,
+                        "status": "ACTIVE" if pos_count > 0 else "SCANNING"
                     }
-                payload["data"]["strategies"] = stats
-
-                # 3. Portfolio & Metrics
-                # Get ensemble sentiment for BTC
-                ens_sig = await state.get("ml_signal:BTC/USDT")
+                payload["data"]["strategies"] = strategies
+                
+                # 3. Portfolio Metrics
+                total_value = float(await state.get_float("portfolio:total_value") or float(os.getenv("CAPITAL", 10000.0)))
+                sharpe = float(await state.get_float("metrics:sharpe") or 0.0)
+                drawdown = float(await state.get_float("metrics:drawdown") or 0.0)
+                win_rate = float(await state.get_float("metrics:winrate") or 0.0)
+                
+                # Derive sentiment from BTC signal
+                btc_sig = market_data.get("BTC/USDT", {}).get("signal", "NEUTRAL")
                 sentiment = "NEUTRAL"
-                if ens_sig:
-                    if isinstance(ens_sig, str):
-                        try: ens_sig = json.loads(ens_sig)
-                        except: pass
-                    raw_sentiment = ens_sig.get('signal', 'NEUTRAL')
-                    if raw_sentiment == 'BUY': sentiment = 'BULL'
-                    elif raw_sentiment == 'SELL': sentiment = 'BEAR'
-                    else: sentiment = 'NEUTRAL'
+                if btc_sig == "BUY": sentiment = "BULL"
+                elif btc_sig == "SELL": sentiment = "BEAR"
 
                 payload["data"]["portfolio"] = {
-                    "value": float(await state.get_float('portfolio:value') or 0.0),
-                    "sharpe": float(await state.get('metrics:sharpe') or 0),
-                    "drawdown": float(await state.get('metrics:drawdown') or 0),
-                    "profit_factor": float(await state.get('metrics:profit_factor') or 0),
-                    "win_rate": float(await state.get('metrics:winrate') or 0),
-                    "sentiment": sentiment
+                    "value": total_value,
+                    "sharpe": sharpe,
+                    "drawdown": drawdown,
+                    "win_rate": win_rate,
+                    "profit_factor": float(await state.get_float("metrics:profit_factor") or 1.0),
+                    "sentiment": sentiment,
+                    "volatility": 4.2, # Placeholder or calc
+                    "trades": int(await state.get("stats:total_trades") or sum(s['trades'] for s in strategies.values()))
                 }
-
-                # 4. History (last 20 items to save bandwidth)
-                equity_raw = await state.redis.lrange('equity:history', 0, 19)
-                payload["data"]["equity_history"] = [json.loads(e) for e in equity_raw]
                 
-                logs_raw = await state.redis.lrange('logs:live', 0, 49)
-                payload["data"]["logs"] = [json.loads(l) for l in logs_raw]
-
-                # 5. Open Positions
-                payload["data"]["positions"] = await state.get_all_positions()
-
-                # 6. Signals for Chart (Entries/Exits)
+                # 4. Open Positions
+                payload["data"]["positions"] = await state.get("positions:active") or []
+                
+                # 4.1 Active Orders from Binance
+                binance_acc = await state.get('binance:account') or {}
+                payload["data"]["orders"] = binance_acc.get('positions', []) # Simplified for now
+                
+                # 5. Recent Signals
                 signals_raw = await state.redis.lrange('signals:history', 0, 49)
                 payload["data"]["signals"] = [json.loads(s) for s in signals_raw]
                 
-                # 7. METRICS_UPDATE for Live Dashboard
+                # 5.1 Trade History
+                trades_raw = await state.redis.lrange('trade:history', 0, 49)
+                payload["data"]["trades"] = [json.loads(t) for t in trades_raw]
+                
+                # 6. Equity History
+                equity_raw = await state.redis.lrange('equity:history', 0, 49)
+                payload["data"]["equity_history"] = [json.loads(e) for e in equity_raw]
+                
+                # 7. Recent Logs
+                logs_raw = await state.redis.lrange('logs:live', 0, 99)
+                payload["data"]["logs"] = [json.loads(l) for l in logs_raw]
+                
+                # 8. Latest Candles (Shortcut for Main Chart)
+                payload["data"]["latest_candles"] = market_data["BTC/USDT"]["candles"]
+                
+                # 9. Rollout Status
+                rollout_phase = await state.get('rollout:current_phase') or 'PHASE_1_MICRO'
+                rollout_start = await state.get_float('rollout:phase_start_time') or 0.0
+                elapsed_days = round((time.time() - rollout_start) / 86400, 1) if rollout_start > 0 else 0
+                
+                # Send METRICS_UPDATE for legacy compatibility if needed
                 await websocket.send_json({
                     "type": "METRICS_UPDATE",
                     "data": {
-                        "account_value": payload["data"]["portfolio"]["value"],
+                        "account_value": total_value,
                         "daily_pnl": float(await state.get_float('pnl:24h') or 0.0),
-                        "win_rate": payload["data"]["portfolio"]["win_rate"],
-                        "drawdown": payload["data"]["portfolio"]["drawdown"],
+                        "win_rate": win_rate,
+                        "drawdown": drawdown,
                         "phase": rollout_phase
                     }
                 })
-                
-                # 8. Latest Trade Executed
-                latest_trade = await state.redis.lrange('trade:history', 0, 0)
-                if latest_trade:
-                    await websocket.send_json({
-                        "type": "TRADE_EXECUTED",
-                        "timestamp": datetime.now().isoformat(),
-                        "data": json.loads(latest_trade[0])
-                    })
 
+                # Broadcast rollout update
+                await websocket.send_json({
+                    "type": "ROLLOUT_UPDATE",
+                    "phase": rollout_phase,
+                    "elapsed_days": elapsed_days
+                })
+
+                # Send rich payload
                 await websocket.send_json(payload)
-                await asyncio.sleep(2)
+                
+                await asyncio.sleep(1)  # High frequency 1s update
                 
         except WebSocketDisconnect:
-            log.info("Dashboard WS disconnected")
+            log.info("🛑 Dashboard WS disconnected")
         except Exception as e:
-            log.error(f"WS push error: {e}")
+            log.error(f"❌ WebSocket error: {e}")
 
     # --- DASHBOARD SERVING ---
     import os
