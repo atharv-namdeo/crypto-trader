@@ -9,7 +9,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
-import CountUp from 'react-countup';
+import { CountUp } from 'react-countup';
 
 const TopBar = () => {
   const { data, connected } = useSocket();

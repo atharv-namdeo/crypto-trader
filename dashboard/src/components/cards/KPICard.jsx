@@ -1,5 +1,5 @@
 import React from 'react';
-import CountUp from 'react-countup';
+import { CountUp } from 'react-countup';
 
 const KPICard = ({ title, value, subValue, trend, trendValue, color = 'blue', prefix = '', suffix = '', decimals = 2 }) => {
   const borderColors = {
