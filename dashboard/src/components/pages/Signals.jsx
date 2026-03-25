@@ -47,7 +47,7 @@ const Signals = () => {
                    <h4 className="text-xs font-bold text-text-primary uppercase mb-2">Algorithm Insights</h4>
                    <p className="text-[12px] text-text-secondary leading-relaxed">
                      The <span className="text-accent-primary font-bold">Ensemble Voting</span> mechanism combines XGBoost, Random Forest, and Gradient Boosting models. 
-                     The radar chart displays membership scores across 6 key market dimensions. High overlaps indicate strong signal consensus and a Sharpe {">"} 1.8 projection.
+                     The radar chart displays membership scores across 6 key market dimensions. High overlaps indicate strong signal consensus and a Sharpe &gt; 1.8 projection.
                    </p>
                 </div>
              </div>

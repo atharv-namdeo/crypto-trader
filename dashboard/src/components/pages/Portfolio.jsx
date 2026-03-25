@@ -76,7 +76,7 @@ const Portfolio = () => {
                <DrawdownChart />
              </div>
              <div className="mt-4 p-3 bg-bg-tertiary/20 rounded border border-border/50 italic text-[11px] text-text-secondary leading-relaxed">
-               Current strategy allocation is optimized for <span className="text-accent-primary font-bold">Compound Growth</span> with a target Sharpe {">"} 1.8. 
+               Current strategy allocation is optimized for <span className="text-accent-primary font-bold">Compound Growth</span> with a target Sharpe &gt; 1.8. 
                Daily risk limit is static at 2.5% of total capital.
              </div>
            </div>
