@@ -252,7 +252,7 @@ class AIEnsembleStrategy:
         
         # Order Request
         req = {'action': 'OPEN', 'side': side, 'qty': qty, 'price': price, 'strategy': 'AI_ENSEMBLE'}
-        await self.state.redis.rpush(f"order_queue:{symbol}", json.dumps(req))
+        await self.state.set(f"order_request:{symbol}", req)
         
         log.info(f"🚀 [AI ENSEMBLE] OPEN {side} {symbol} at {price:.2f}")
 
@@ -269,6 +269,6 @@ class AIEnsembleStrategy:
         
         # Order Request
         req = {'action': 'CLOSE', 'side': side, 'qty': qty, 'strategy': 'AI_ENSEMBLE'}
-        await self.state.redis.rpush(f"order_queue:{symbol}", json.dumps(req))
+        await self.state.set(f"order_request:{symbol}", req)
         
         log.info(f"🛑 [AI ENSEMBLE] CLOSE {side} {symbol} at {price:.2f} PnL: ${pnl_usd:.2f} ({reason})")

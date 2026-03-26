@@ -44,12 +44,28 @@ class BaseStrategy:
 
     async def _open_position(self, symbol: str, side: str, price: float, confidence: float):
         """Standard wrapper for opening a position with risk validation."""
-        # This is a simplified placeholder for the actual order logic
-        # In a real bot, this would call the OrderEngine
         log.info(f"📡 {self.name} requesting {side} on {symbol} at {price}")
-        # (Order logic here)
+        
+        # Calculate a default qty based on capital if not provided by child
+        qty = (self.capital * 0.1) / price 
+        
+        req = {
+            'action': 'OPEN',
+            'side': side,
+            'qty': qty,
+            'price': price,
+            'strategy': self.name
+        }
+        await self.state.set(f"order_request:{symbol}", req)
 
     async def _close_position(self, symbol: str, pos: dict, price: float, reason: str):
         """Standard wrapper for closing a position."""
         log.info(f"📡 {self.name} closing {symbol} at {price} | Reason: {reason}")
-        # (Order logic here)
+        
+        req = {
+            'action': 'CLOSE',
+            'side': pos['side'],
+            'qty': pos['qty'],
+            'strategy': self.name
+        }
+        await self.state.set(f"order_request:{symbol}", req)

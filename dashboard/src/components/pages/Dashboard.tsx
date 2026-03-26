@@ -3,12 +3,12 @@ import MetricSparkline from '../charts/MetricSparkline';
 import CandlestickChart from '../charts/CandlestickChart';
 import SignalCard from '../cards/SignalCard';
 import StrategyCard from '../cards/StrategyCard';
-import { useSocket } from '../../context/SocketContext';
+import { usePortfolioStats } from '../../hooks/usePortfolioStats';
 import { motion } from 'framer-motion';
 import { Activity, Brain, Zap, TrendingUp } from 'lucide-react';
 
 const Dashboard = () => {
-  const { data, connected } = useSocket();
+  const { data, connected, portfolioValue, portfolioChange, dailyPnl } = usePortfolioStats();
 
   // Safe formatting helpers
   const safeNumber = (val: any) => typeof val === 'number' ? val : parseFloat(String(val || 0)) || 0;
@@ -25,14 +25,15 @@ const Dashboard = () => {
   };
 
   // Data mapping with robust fallbacks
-  const portfolio = data?.portfolio || { total_value: 0, daily_pnl: 0, daily_change_pct: 0, sharpe: 0, drawdown: 0, win_rate: 0 };
   const market = data?.market || {};
   const strategies = data?.strategies || {};
   const signals = data?.signals || [];
   const latestCandles = data?.latest_candles || [];
 
-  // Mock trend data for sparklines until backend history is ready
-  const mockTrend = Array.from({ length: 20 }, (_, i) => ({ value: 50000 + Math.random() * 5000 }));
+  // Use equity history for sparklines, fallback to mock only if empty
+  const trendData = (data?.equity_history && data.equity_history.length > 0) 
+    ? data.equity_history 
+    : Array.from({ length: 20 }, (_, i) => ({ value: 50000 + Math.random() * 5000 }));
 
   return (
     <div className="flex flex-col gap-8 animate-fade-in pb-12">
@@ -49,9 +50,14 @@ const Dashboard = () => {
             <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">Global Sentiment</span>
             <div className="flex items-center gap-2">
               <div className="h-1.5 w-24 bg-bg-tertiary rounded-full overflow-hidden">
-                <div className="h-full bg-accent-success w-[72%]"></div>
+                <div 
+                  className={`h-full transition-all duration-1000 ${data?.portfolio?.sentiment === 'BEAR' ? 'bg-accent-danger' : 'bg-accent-success'}`}
+                  style={{ width: `${data?.portfolio?.sentiment === 'BULL' ? 75 : data?.portfolio?.sentiment === 'BEAR' ? 25 : 50}%` }}
+                ></div>
               </div>
-              <span className="text-xs font-bold text-accent-success">BULLISH</span>
+              <span className={`text-xs font-bold ${data?.portfolio?.sentiment === 'BEAR' ? 'text-accent-danger' : 'text-accent-success'}`}>
+                {data?.portfolio?.sentiment || 'NEUTRAL'}
+              </span>
             </div>
           </div>
         </div>
@@ -63,28 +69,28 @@ const Dashboard = () => {
           title="Bitcoin / USDT" 
           value={safeScalar(market['BTC/USDT']?.price || '0.00')} 
           change={safeNumber(market['BTC/USDT']?.change || 0)} 
-          data={mockTrend} 
+          data={trendData} 
           color="#f59e0b"
         />
         <MetricSparkline 
           title="Ethereum / USDT" 
           value={safeScalar(market['ETH/USDT']?.price || '0.00')} 
           change={safeNumber(market['ETH/USDT']?.change || 0)} 
-          data={mockTrend} 
+          data={trendData} 
           color="#6366f1"
         />
         <MetricSparkline 
           title="Solana / USDT" 
           value={safeScalar(market['SOL/USDT']?.price || '0.00')} 
           change={safeNumber(market['SOL/USDT']?.change || 0)} 
-          data={mockTrend} 
+          data={trendData} 
           color="#14f195"
         />
         <MetricSparkline 
           title="Total Equity (USD)" 
-          value={safeNumber(portfolio.total_value || 0)} 
-          change={safeNumber(portfolio.daily_change_pct || 2.4)} 
-          data={mockTrend} 
+          value={portfolioValue} 
+          change={portfolioChange} 
+          data={trendData} 
           color="#10b981"
           prefix="$"
         />
@@ -139,8 +145,12 @@ const Dashboard = () => {
                 </h2>
                 <div className="h-4 w-px bg-border mx-1"></div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-mono font-bold text-text-primary">BTC/USDT</span>
-                  <span className="text-[11px] font-mono font-bold text-accent-success">+1.24%</span>
+                  <span className="text-[13px] font-mono font-bold text-text-primary uppercase tracking-tighter">
+                    BTC/USDT
+                  </span>
+                  <span className={`text-[11px] font-mono font-bold ${data?.market['BTC/USDT']?.change >= 0 ? 'text-accent-success' : 'text-accent-danger'}`}>
+                    {data?.market['BTC/USDT']?.change >= 0 ? '+' : ''}{(data?.market['BTC/USDT']?.change || 0).toFixed(2)}%
+                  </span>
                 </div>
               </div>
               <div className="flex gap-1.5">
@@ -177,8 +187,10 @@ const Dashboard = () => {
               {['SCALPER', 'SWING', 'AI_ENSEMBLE'].map(s => {
                 const sData = strategies[s.toLowerCase()] || strategies[s] || { 
                   trades_24h: 0, 
+                  trades: 0,
                   win_rate: 0, 
                   daily_pnl: 0, 
+                  pnl: 0,
                   status: 'SCANNING', 
                   active_positions: 0 
                 };
@@ -188,11 +200,11 @@ const Dashboard = () => {
                     key={s}
                     name={s} 
                     status={sData.status || 'SCANNING'} 
-                    capital={s === 'AI_ENSEMBLE' ? 500 : 250} 
-                    trades={sData.trades_24h} 
-                    winRate={String(sData.win_rate || '0.0')} 
-                    pnl={sData.daily_pnl || 0} 
-                    avgHold={s === 'SCALPER' ? '4m 12s' : s === 'SWING' ? '2h 45m' : 'Auto'} 
+                    capital={sData.allocated || (s === 'AI_ENSEMBLE' ? 500 : 250)} 
+                    trades={sData.trades} 
+                    winRate={String((sData.win_rate || 0).toFixed(1))} 
+                    pnl={sData.pnl || 0} 
+                    avgHold={sData.avg_hold || 'Auto'} 
                     utilization={sData.active_positions > 0 ? 80 : 0} 
                     lastSignal={sData.last_trade || 'N/A'}
                   />

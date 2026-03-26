@@ -8,12 +8,16 @@ import {
   Activity,
   PieChart
 } from 'lucide-react';
-import { useSocket } from '../../context/SocketContext';
+import { usePortfolioStats } from '../../hooks/usePortfolioStats';
 
 const TopBar = () => {
-  const { data, connected } = useSocket();
-  const safeNumber = (val: any) => typeof val === 'number' ? val : parseFloat(String(val || 0)) || 0;
-  const safeScalar = (val: any) => (typeof val === 'string' || typeof val === 'number') ? val : '';
+  const { 
+    portfolioValue, 
+    portfolioChange, 
+    dailyPnl, 
+    connected,
+    data
+  } = usePortfolioStats();
   
   const [time, setTime] = useState(new Date());
 
@@ -22,9 +26,7 @@ const TopBar = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const portfolioValue = safeNumber(data?.portfolio?.total_value || 12450.32);
-  const portfolioChange = safeNumber(data?.portfolio?.daily_change_pct || 2.5);
-  const dailyPnl = safeNumber(data?.portfolio?.daily_pnl || 312.45);
+  const safeScalar = (val: any) => (typeof val === 'string' || typeof val === 'number') ? val : '';
 
   return (
     <header className="fixed top-0 left-0 right-0 h-[56px] bg-bg-secondary border-b border-border flex items-center justify-between px-4 z-50 shadow-sm backdrop-blur-md bg-opacity-80">

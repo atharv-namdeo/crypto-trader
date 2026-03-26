@@ -173,12 +173,20 @@ def create_app(state: StateManager):
                     wins = int(await state.get(f"stats:{s}:wins") or 0)
                     win_rate = (wins / trades * 100) if trades > 0 else 0.0
                     
+                    # Get allocation from settings
+                    allocation_pct = settings.STRATEGY_ALLOCATIONS.get(s, 0.10)
+                    allocated_capital = total_value * allocation_pct
+                    
                     strategies[s] = {
                         "pos_count": pos_count,
                         "pnl": pnl,
                         "win_rate": win_rate,
                         "trades": trades,
-                        "status": "ACTIVE" if pos_count > 0 else "SCANNING"
+                        "active_positions": pos_count,
+                        "status": await state.get(f"engine:status:{s}") or ("ACTIVE" if pos_count > 0 else "SCANNING"),
+                        "allocated": round(allocated_capital, 2),
+                        "avg_hold": await state.get(f"stats:{s}:avg_hold") or ("12m" if s == "scalper" else "4h" if s == "swing" else "1d"),
+                        "last_trade": await state.get(f"stats:{s}:last_trade") or "N/A"
                     }
                 payload["data"]["strategies"] = strategies
                 

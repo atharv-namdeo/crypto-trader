@@ -6,9 +6,11 @@ export interface EngineData {
   strategies: Record<string, { 
     status: string; 
     daily_pnl: number; 
+    pnl?: number;
     total_pnl: number; 
     win_rate: number;
     trades_24h: number;
+    trades?: number;
     avg_win: number;
     avg_loss: number;
     profit_factor: number;
@@ -16,6 +18,7 @@ export interface EngineData {
     max_drawdown: number;
     active_positions: number;
     allocated: number;
+    avg_hold: string;
     last_trade?: string;
   }>;
   portfolio: { 
