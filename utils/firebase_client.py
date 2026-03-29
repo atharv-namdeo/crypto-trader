@@ -86,3 +86,22 @@ def get_settings():
         return {}
 
 
+def get_all_trades():
+    """Fetch all trades from Firestore."""
+    if db is None:
+        return []
+    try:
+        # Fetch all documents from 'trades' collection, ordered by timestamp
+        # Using string 'DESCENDING' as proven in read_firebase.py
+        docs = db.collection('trades').order_by('timestamp', direction='DESCENDING').stream()
+        trades = []
+        for doc in docs:
+            t = doc.to_dict()
+            t['id'] = doc.id  # Include doc ID just in case
+            trades.append(t)
+        return trades
+    except Exception as e:
+        print(f"[Firebase] Error fetching trades: {e}")
+        return []
+
+

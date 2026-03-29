@@ -2,10 +2,12 @@ import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, StreamingResponse
 import asyncio
 import logging
 import time
+import io
+import csv
 from datetime import datetime
 from core.state_manager import StateManager
 from api.metrics import router as metrics_router
@@ -59,6 +61,27 @@ def create_app(state: StateManager):
         for key in ["scalper_enabled", "scalper_threshold", "swing_enabled", "swing_threshold", "position_enabled", "position_threshold"]:
             settings[key] = await state.get(f"settings:{key}")
         return {"data": settings}
+
+    @app.get("/api/v1/export/trades")
+    async def export_trades():
+        """Export all trades from Firebase as CSV"""
+        from utils.firebase_client import get_all_trades
+        trades = get_all_trades()
+        
+        if not trades:
+            return {"status": "error", "message": "No trades found in Firebase"}
+
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=trades[0].keys() if trades else [])
+        writer.writeheader()
+        writer.writerows(trades)
+        
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=trades_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+        )
 
     @app.post("/api/v1/settings", dependencies=[Depends(verify_api_key)])
     async def update_settings(settings: dict = Body(...)):

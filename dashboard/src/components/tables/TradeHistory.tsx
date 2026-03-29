@@ -19,7 +19,12 @@ const TradeHistory = ({ trades = [] }) => {
                 <option>ETH/USDT</option>
             </select>
           </div>
-          <button className="px-4 py-1 bg-bg-primary border border-border rounded text-[11px] font-bold text-text-secondary hover:text-text-primary hover:border-border-bright">Export CSV</button>
+          <button 
+            onClick={() => window.open('/api/v1/export/trades', '_blank')}
+            className="px-4 py-1 bg-bg-primary border border-border rounded text-[11px] font-bold text-text-secondary hover:text-text-primary hover:border-border-bright"
+          >
+            Export CSV
+          </button>
       </div>
 
       <div className="overflow-x-auto">
