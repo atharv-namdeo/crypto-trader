@@ -1,4 +1,4 @@
-.env
+# .env (Removed from ignore for private repo sync)
 firebase_key.json
 trading_env/
 venv/
