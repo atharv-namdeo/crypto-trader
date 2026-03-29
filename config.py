@@ -9,7 +9,12 @@ load_dotenv()
 log = logging.getLogger("Config")
 
 class Settings(BaseSettings):
-    # --- BINANCE KEYS ---
+    # --- BINANCE DEMO ACCOUNT KEYS (Replaces Testnet) ---
+    # Create at: https://testnet.binance.vision/
+    BINANCE_DEMO_API_KEY: str = ""
+    BINANCE_DEMO_API_SECRET: str = ""
+    
+    # LEGACY KEYS (for reference)
     BINANCE_TEST_API_KEY: str = ""
     BINANCE_TEST_API_SECRET: str = ""
     BINANCE_REAL_API_KEY: str = ""
@@ -21,7 +26,7 @@ class Settings(BaseSettings):
 
     # --- BOT SETTINGS ---
     DRY_RUN: bool = False
-    BINANCE_TESTNET: bool = True
+    BINANCE_TESTNET: bool = True  # Use demo account (not sandbox)
     CAPITAL: float = 1000.0
     RISK_PER_TRADE: float = 0.02
     
@@ -85,12 +90,23 @@ REDIS_URL = settings.REDIS_URL
 TIMEFRAMES = settings.TIMEFRAMES
 
 def get_exchange(use_testnet=True):
+    """
+    Initialize Binance exchange using DEMO ACCOUNT (not deprecated Sandbox)
+    Testnet/Sandbox deprecated for Binance Futures as of 2024
+    Using Demo Account keys instead
+    """
     import ccxt.async_support as ccxt
-    prefix = 'BINANCE_TEST_' if use_testnet else 'BINANCE_REAL_'
     
-    api_key = getattr(settings, f"{prefix}API_KEY") or settings.BINANCE_API_KEY
-    api_secret = getattr(settings, f"{prefix}API_SECRET") or settings.BINANCE_API_SECRET
+    if use_testnet:
+        # Use DEMO account credentials
+        api_key = settings.BINANCE_DEMO_API_KEY or settings.BINANCE_API_KEY
+        api_secret = settings.BINANCE_DEMO_API_SECRET or settings.BINANCE_API_SECRET
+    else:
+        # Use REAL account credentials
+        api_key = settings.BINANCE_REAL_API_KEY or settings.BINANCE_API_KEY
+        api_secret = settings.BINANCE_REAL_API_SECRET or settings.BINANCE_API_SECRET
     
+    # Create exchange instance
     exchange = ccxt.binance({
         'apiKey': api_key,
         'secret': api_secret,
@@ -102,15 +118,12 @@ def get_exchange(use_testnet=True):
         },
     })
     
+    # NO LONGER SET SANDBOX MODE - It's deprecated for futures!
+    # Demo account is accessed by using demo.binance.vision credentials
+    
     if use_testnet:
-        try:
-            # CCXT's set_sandbox_mode(True) for Binance Futures is being deprecated 
-            # by Binance in favor of "Demo Trading". 
-            exchange.set_sandbox_mode(True)
-        except Exception as e:
-            if "not supported for futures anymore" in str(e):
-                log.warning("⚠️ Binance Testnet Sandbox is deprecated for Futures. Falling back to default (Demo Trading keys).")
-            else:
-                log.warning(f"⚠️ Sandbox mode error: {e}")
-            
+        log.info("✅ Using Binance Demo Account (Sandbox deprecated for Futures)")
+    else:
+        log.warning("⚠️ LIVE REAL ACCOUNT MODE - USE WITH CAUTION")
+    
     return exchange
