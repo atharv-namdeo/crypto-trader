@@ -94,12 +94,13 @@ class PreLaunchValidator:
             return False
         
         finally:
-            # IMPORTANT: Always close exchange to avoid hanging connections
+            # IMPORTANT: Releasing resources with explicit error handling
             if exchange:
                 try:
                     await exchange.close()
-                except:
-                    pass
+                    log.info("Exchange connection closed gracefully.")
+                except Exception as close_err:
+                    log.warning(f"Error during exchange close: {close_err}")
     
     async def _validate_models(self) -> bool:
         """Verify all ML models load without errors (allow missing models)"""
@@ -224,18 +225,24 @@ class PreLaunchValidator:
         return True # Relying on OS sync
     
     async def _validate_market_connectivity(self) -> bool:
-        """Verify market data connectivity"""
+        """Verify market data connectivity (respects TESTNET/DEMO)"""
+        exchange = None
         try:
-            from config import get_exchange
-            exchange = get_exchange(use_testnet=True)
+            from config import get_exchange, settings
+            exchange = get_exchange(use_testnet=settings.BINANCE_TESTNET)
             ticker = await exchange.fetch_ticker('BTC/USDT')
-            await exchange.close()
             if not ticker or 'last' not in ticker:
                 return False
             return True
         except Exception as e:
             log.error(f"Market connectivity check failed: {e}")
             return False
+        finally:
+            if exchange:
+                try:
+                    await exchange.close()
+                except Exception as close_err:
+                    log.warning(f"Error closing market-check exchange: {close_err}")
     
     async def _validate_backtest(self) -> bool:
         """Verify recent backtest results"""

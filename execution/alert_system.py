@@ -47,7 +47,7 @@ class AlertSystem:
         log.warning(f"[{level}] {title}: {message}")
 
     async def _send_telegram(self, alert: dict):
-        """Minimal Telegram sender using aiohttp or similar"""
+        """Minimal Telegram sender using aiohttp with explicit resource cleanup"""
         import aiohttp
         
         icon = "🚨" if alert['level'] == 'CRITICAL' else "⚠️" if alert['level'] == 'HIGH' else "ℹ️"
@@ -65,10 +65,16 @@ class AlertSystem:
             'parse_mode': 'Markdown'
         }
         
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as resp:
+        # Explicitly managing session lifecycle to avoid Railway resource leaks
+        session = aiohttp.ClientSession()
+        try:
+            async with session.post(url, json=payload, timeout=10) as resp:
                 if resp.status != 200:
                     log.error(f"Telegram API error: {await resp.text()}")
+        except Exception as e:
+            log.error(f"Telegram request failed: {e}")
+        finally:
+            await session.close()
 
 async def monitor_critical_metrics(state: StateManager, alert_system: AlertSystem):
     """Background task to monitor system health and trigger alerts"""

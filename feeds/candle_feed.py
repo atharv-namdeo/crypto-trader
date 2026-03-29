@@ -63,15 +63,23 @@ class CandleFeedManager:
         log.info("✅ All symbols bootstrapped.")
             
     async def _update_symbol_timeframes(self, symbol: str, limit: int = 100):
-        """Update all timeframes for a single symbol, respecting concurrency limits."""
+        """Update all timeframes for a single symbol, using Demo API if testnet is active."""
+        from config import settings
+        
         async with self.semaphore:
-            # We reuse one session for all timeframes of this symbol update
-            async with aiohttp.ClientSession() as session:
+            # Use Demo API for testnet to bypass geo-restrictions
+            if settings.BINANCE_TESTNET:
+                base_url = "https://demo-api.binance.com/api/v3/klines"
+            else:
+                base_url = "https://fapi.binance.com/fapi/v1/klines"
+
+            session = aiohttp.ClientSession()
+            try:
                 for tf in self.timeframes:
                     try:
                         market_sym = symbol.replace('/', '').upper()
-                        # Use CCXT style or direct API. This is direct API to Binance Futures.
-                        url = f"https://fapi.binance.com/fapi/v1/klines?symbol={market_sym}&interval={tf}&limit={limit}"
+                        url = f"{base_url}?symbol={market_sym}&interval={tf}&limit={limit}"
+                        
                         async with session.get(url, timeout=10) as response:
                             if response.status != 200:
                                 log.error(f"Binance API error {response.status} for {symbol} {tf}")
@@ -93,6 +101,8 @@ class CandleFeedManager:
                         
                     except Exception as e:
                         log.error(f"Failed to fetch {tf} for {symbol}: {e}")
+            finally:
+                await session.close()
         
         await self.state.publish(f"candles_updated:{symbol}", "1")
         
