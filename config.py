@@ -91,18 +91,23 @@ TIMEFRAMES = settings.TIMEFRAMES
 
 def get_exchange(use_testnet=True):
     """
-    Initialize Binance exchange using DEMO ACCOUNT (not deprecated Sandbox)
-    Testnet/Sandbox deprecated for Binance Futures as of 2024
-    Using Demo Account keys instead
+    Initialize Binance exchange - uses TEST keys if available, falls back to DEMO
     """
     import ccxt.async_support as ccxt
     
     if use_testnet:
-        # Use DEMO account credentials
-        api_key = settings.BINANCE_DEMO_API_KEY or settings.BINANCE_API_KEY
-        api_secret = settings.BINANCE_DEMO_API_SECRET or settings.BINANCE_API_SECRET
+        # Try DEMO first, then TEST, then generic keys
+        api_key = (
+            settings.BINANCE_DEMO_API_KEY or 
+            settings.BINANCE_TEST_API_KEY or 
+            settings.BINANCE_API_KEY
+        )
+        api_secret = (
+            settings.BINANCE_DEMO_API_SECRET or 
+            settings.BINANCE_TEST_API_SECRET or 
+            settings.BINANCE_API_SECRET
+        )
     else:
-        # Use REAL account credentials
         api_key = settings.BINANCE_REAL_API_KEY or settings.BINANCE_API_KEY
         api_secret = settings.BINANCE_REAL_API_SECRET or settings.BINANCE_API_SECRET
     
@@ -110,10 +115,17 @@ def get_exchange(use_testnet=True):
     if not api_key or not api_secret:
         error_msg = (
             "❌ Missing Binance API credentials!\n"
-            "Set these in Railway variables:\n"
-            "  - BINANCE_DEMO_API_KEY\n"
-            "  - BINANCE_DEMO_API_SECRET\n"
-            "Get them from: https://testnet.binance.vision/"
+            "Set these in Railway variables (at least one pair):\n"
+            "  Option 1 (Recommended Demo Account):\n"
+            "    - BINANCE_DEMO_API_KEY\n"
+            "    - BINANCE_DEMO_API_SECRET\n"
+            "    Get from: https://testnet.binance.vision/\n\n"
+            "  Option 2 (Testnet):\n"
+            "    - BINANCE_TEST_API_KEY\n"
+            "    - BINANCE_TEST_API_SECRET\n\n"
+            "  Option 3 (Generic):\n"
+            "    - BINANCE_API_KEY\n"
+            "    - BINANCE_API_SECRET"
         )
         log.error(error_msg)
         raise ValueError(error_msg)
@@ -130,11 +142,8 @@ def get_exchange(use_testnet=True):
         },
     })
     
-    # NO LONGER SET SANDBOX MODE - It's deprecated for futures!
-    # Demo account is accessed by using demo.binance.vision credentials
-    
     if use_testnet:
-        log.info("✅ Using Binance Demo Account (Sandbox deprecated for Futures)")
+        log.info("✅ Using Binance Testnet/Demo Account")
     else:
         log.warning("⚠️ LIVE REAL ACCOUNT MODE - USE WITH CAUTION")
     
