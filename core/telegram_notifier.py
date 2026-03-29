@@ -66,7 +66,7 @@ class TelegramNotifier:
             f"🎯 Take Profit: <b>${tp:,.2f}</b>\n"
             f"💪 Conviction: <b>{conviction:.2f}</b>\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"🤖 QuantBot v6.0 | PAPER"
+            f"🤖 QuantBot v8.1 | Top 50 Active"
         )
         await self.send(msg)
     
@@ -128,7 +128,7 @@ class TelegramNotifier:
             f"━━━━━━━━━━━━━━━━━━\n"
             f"{message}\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"🤖 QuantBot v6.0"
+            f"🤖 QuantBot v8.1"
         )
         await self.send(msg)
     
@@ -137,11 +137,11 @@ class TelegramNotifier:
             f"🚀 <b>QUANTBOT STARTED</b>\n"
             f"━━━━━━━━━━━━━━━━━━\n"
             f"💼 Portfolio: <b>${portfolio_value:,.2f}</b>\n"
-            f"⚡ Scalper: <b>$200 | threshold 0.45</b>\n"
-            f"🌊 Swing: <b>$400 | threshold 0.55</b>\n"
-            f"🏔 Position: <b>$400 | threshold 0.65</b>\n"
-            f"📊 Mode: <b>PAPER TRADING</b>\n"
+            f"⚡ Scalper: <b>Active</b>\n"
+            f"🌊 Swing: <b>Active</b>\n"
+            f"🏔 Position: <b>Active</b>\n"
+            f"📊 Mode: <b>PAPER TRADING (Demo)</b>\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"All systems running ✅"
+            f"All 50+ symbols monitored ✅"
         )
         await self.send(msg)

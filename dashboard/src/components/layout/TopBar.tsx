@@ -54,7 +54,9 @@ const TopBar = () => {
             {connected ? 'Standard Operation' : 'System Offline'}
           </span>
           <div className="h-3 w-px bg-border mx-1"></div>
-          <span className="text-[9px] font-mono text-accent-success">Bybit Demo</span>
+          <span className="text-[9px] font-mono text-accent-success uppercase tracking-widest px-2 py-0.5 bg-accent-success/10 rounded">
+            {data?.exchange || 'Binance Demo'}
+          </span>
         </div>
       </div>
 

@@ -16,11 +16,12 @@ from core.state_manager import StateManager
 log = logging.getLogger("CandleFeed")
 
 class CandleFeedManager:
-    def __init__(self, symbols: list, timeframes: list, state: StateManager):
+    def __init__(self, symbols: list, timeframes: list, state: StateManager, max_concurrent: int = 10):
         self.symbols = symbols
-        self.timeframes = timeframes  # e.g. ["1m", "5m", "15m", "1h", "4h"]
+        self.timeframes = timeframes  
         self.state = state
         self.running = False
+        self.semaphore = asyncio.Semaphore(max_concurrent)
 
     async def run_forever(self):
         self.running = True
@@ -55,46 +56,44 @@ class CandleFeedManager:
                 await asyncio.sleep(5)
 
     async def _bootstrap_all(self):
-        """Fetch historical data on startup — pre-seed 200+ candles for all indicators."""
-        log.info("📊 Pre-seeding candle history for all symbols and timeframes...")
-        for symbol in self.symbols:
-            await self._update_symbol_timeframes(symbol, limit=500)
-            log.info(f"✅ Bootstrapped candle history for {symbol} "
-                     f"({len(self.timeframes)} timeframes, 500 candles each)")
+        """Fetch historical data on startup — pre-seed 200+ candles for all symbols in parallel."""
+        log.info(f"📊 Pre-seeding candle history for {len(self.symbols)} symbols...")
+        tasks = [self._update_symbol_timeframes(symbol, limit=500) for symbol in self.symbols]
+        await asyncio.gather(*tasks)
+        log.info("✅ All symbols bootstrapped.")
             
     async def _update_symbol_timeframes(self, symbol: str, limit: int = 100):
-        import aiohttp
-        for tf in self.timeframes:
-            try:
-                market_sym = symbol.replace('/', '').upper()
-                url = f"https://testnet.binancefuture.com/fapi/v1/klines?symbol={market_sym}&interval={tf}&limit={limit}"
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url) as response:
-                        raw = await response.json()
-                
-                data = []
-                for k in raw:
+        """Update all timeframes for a single symbol, respecting concurrency limits."""
+        async with self.semaphore:
+            # We reuse one session for all timeframes of this symbol update
+            async with aiohttp.ClientSession() as session:
+                for tf in self.timeframes:
                     try:
-                        data.append({
-                            'timestamp': int(k[0]),
-                            'open':   float(k[1]),
-                            'high':   float(k[2]),
-                            'low':    float(k[3]),
-                            'close':  float(k[4]),
-                            'volume': float(k[5]),
-                        })
-                    except (IndexError, ValueError, TypeError) as e:
-                        log.error(f"Malformed kline detected: {k} | Error: {e}")
-                        continue  # skip malformed candles
-                df = pd.DataFrame(data)
-                
-                # Store in Redis
-                await self.state.set_df(f"ohlcv:{tf}:{symbol}", df)
-                
-            except Exception as e:
-                log.error(f"Failed to fetch {tf} for {symbol}: {e}")
-                
-        # Fire event that new candles are ready
+                        market_sym = symbol.replace('/', '').upper()
+                        # Use CCXT style or direct API. This is direct API to Binance Futures.
+                        url = f"https://fapi.binance.com/fapi/v1/klines?symbol={market_sym}&interval={tf}&limit={limit}"
+                        async with session.get(url, timeout=10) as response:
+                            if response.status != 200:
+                                log.error(f"Binance API error {response.status} for {symbol} {tf}")
+                                continue
+                            raw = await response.json()
+                        
+                        data = []
+                        for k in raw:
+                            data.append({
+                                'timestamp': int(k[0]),
+                                'open':   float(k[1]),
+                                'high':   float(k[2]),
+                                'low':    float(k[3]),
+                                'close':  float(k[4]),
+                                'volume': float(k[5]),
+                            })
+                        df = pd.DataFrame(data)
+                        await self.state.set_df(f"ohlcv:{tf}:{symbol}", df)
+                        
+                    except Exception as e:
+                        log.error(f"Failed to fetch {tf} for {symbol}: {e}")
+        
         await self.state.publish(f"candles_updated:{symbol}", "1")
         
     def stop(self):

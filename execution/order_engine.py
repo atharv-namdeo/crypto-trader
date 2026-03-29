@@ -7,6 +7,7 @@ import os
 import json
 import asyncio
 import logging
+import traceback
 from binance import AsyncClient
 from binance.exceptions import BinanceAPIException
 from core.state_manager import StateManager
@@ -16,15 +17,16 @@ log = logging.getLogger("OrderEngine")
 
 class OrderEngine:
     def __init__(self, state: StateManager, portfolio_risk=None):
+        from config import settings
         self.state = state
         self.portfolio_risk = portfolio_risk
         self.running = False
         
-        self.dry_run = os.getenv('DRY_RUN', 'false').lower() == 'true'
-        self.use_testnet = os.getenv('BINANCE_TESTNET', 'true').lower() == 'true'
+        self.dry_run = settings.DRY_RUN
+        self.use_testnet = settings.BINANCE_TESTNET
         
-        self.api_key = os.getenv('BINANCE_TEST_API_KEY')
-        self.api_secret = os.getenv('BINANCE_TEST_API_SECRET')
+        self.api_key = settings.BINANCE_TEST_API_KEY if self.use_testnet else settings.BINANCE_REAL_API_KEY
+        self.api_secret = settings.BINANCE_TEST_API_SECRET if self.use_testnet else settings.BINANCE_REAL_API_SECRET
         self.client: AsyncClient = None
 
     async def init_client(self):
@@ -32,11 +34,18 @@ class OrderEngine:
         self.client = await AsyncClient.create(
             api_key=self.api_key,
             api_secret=self.api_secret,
-            testnet=True
+            testnet=self.use_testnet
         )
-        # testnet=True natively configures python-binance to use testnet.binancefuture.com and wss://stream.binancefuture.com
+        
+        if self.use_testnet:
+            # Force Futures Testnet URL (sometimes python-binance defaults to Spot Testnet)
+            self.client.API_URL = 'https://testnet.binancefuture.com/fapi'
+            self.client.BASE_URL = 'https://testnet.binancefuture.com'
         
         if not self.dry_run:
+            # Sync history on startup to populate dashboard
+            asyncio.create_task(self.sync_historical_trades())
+            
             for symbol in SYMBOLS:
                 market_sym = symbol.replace('/', '').upper() 
                 try:
@@ -134,9 +143,52 @@ class OrderEngine:
                 await self._execute_close(market_sym, side, qty)
                 await self._log_signal(price, side, 'CLOSE', req.get('strategy', 'AI'))
             return True
-        except Exception as e:
-            log.error(f"🔥 Process Order Error: {e}")
+        except BinanceAPIException as be:
+            log.error(f"❌ [BINANCE ERROR] Code: {be.code} | Msg: {be.message}")
             return False
+        except Exception as e:
+            log.error(f"🔥 Process Order General Error on {symbol}: {e}")
+            log.error(traceback.format_exc())
+            return False
+
+    async def sync_historical_trades(self):
+        """Fetch past trades from Binance to populate Redis history if empty."""
+        try:
+            log.info("🔄 Syncing historical trades from Binance...")
+            # Check if we already have history to avoid duplicates
+            existing = await self.state.redis.llen('trade:history')
+            if existing > 0:
+                log.info(f"📁 Trade history already has {existing} items, skipping sync.")
+                return
+
+            all_synced_trades = []
+            for symbol in SYMBOLS[:10]: # Sync top 10 symbols to avoid rate limits on startup
+                market_sym = symbol.replace('/', '').upper()
+                orders = await self.client.futures_get_all_orders(symbol=market_sym, limit=20)
+                
+                for o in orders:
+                    if o['status'] == 'FILLED':
+                        trade = {
+                            'strategy': 'LEGACY',
+                            'symbol': symbol,
+                            'side': o['side'],
+                            'entry': float(o['avgPrice'] or o['price']),
+                            'exit': float(o['avgPrice'] or o['price']),
+                            'qty': float(o['executedQty']),
+                            'pnl': 0.0, # Cannot reliably compute PnL from orders alone without matching
+                            'reason': 'SYNCED',
+                            'time': datetime.fromtimestamp(o['updateTime']/1000).isoformat()
+                        }
+                        all_synced_trades.append(trade)
+            
+            # Sort by time and push to Redis
+            all_synced_trades.sort(key=lambda x: x['time'])
+            for t in all_synced_trades:
+                await self.state.redis.rpush('trade:history', json.dumps(t))
+            
+            log.info(f"✅ Synced {len(all_synced_trades)} historical trades.")
+        except Exception as e:
+            log.error(f"❌ History sync failed: {e}")
 
     def _validate_and_round(self, symbol: str, side: str, qty: float, price: float, stop: float = None, tp: float = None):
         """Dynamic rounding and sanity checks."""

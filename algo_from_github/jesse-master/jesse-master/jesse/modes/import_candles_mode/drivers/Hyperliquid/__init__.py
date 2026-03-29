@@ -1,3 +1,0 @@
-# Hyperliquid drivers
-from .HyperliquidPerpetual import HyperliquidPerpetual
-from .HyperliquidPerpetualTestnet import HyperliquidPerpetualTestnet

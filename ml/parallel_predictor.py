@@ -17,8 +17,7 @@ class ParallelMLPredictor:
     def __init__(self, state: StateManager):
         self.state = state
         self.executor = ThreadPoolExecutor(max_workers=4)  # CPU-bound
-        # Using ThreadPool for XGB/LGB/RF as they are thread-safe and avoid process overhead
-        # self.gpu_executor = ProcessPoolExecutor(max_workers=1) # For heavy LSTMs if needed
+        self._cache = {} # Inference cache: {symbol: {'ts': timestamp, 'pred': result}}
         
         self.model_paths = {
             'rf': 'ml/models/rf_altcoin.pkl',
@@ -44,8 +43,15 @@ class ParallelMLPredictor:
                 log.error(f"❌ Error loading model {name}: {e}")
                 self.models[name] = None
 
-    async def predict_all(self, features: dict, symbol: str) -> dict:
-        """Run ALL models in PARALLEL and return ensemble prediction."""
+    async def predict_all(self, features: dict, symbol: str, timestamp: float = None) -> dict:
+        """Run ALL models in PARALLEL and return ensemble prediction, with caching."""
+        
+        # Check cache if timestamp is provided (usually candle close time)
+        if timestamp and symbol in self._cache:
+            if self._cache[symbol]['ts'] == timestamp:
+                log.debug(f"🎯 Cache HIT for {symbol} at {timestamp}")
+                return self._cache[symbol]['pred']
+
         tasks = []
         
         # CPU-bound models via ThreadPool
@@ -68,7 +74,13 @@ class ParallelMLPredictor:
         elapsed = time.time() - start_time
         
         log.info(f"⚡ Parallel prediction for {symbol} took {elapsed:.3f}s")
-        return self._ensemble_vote(results)
+        prediction = self._ensemble_vote(results)
+        
+        # Save to cache
+        if timestamp:
+            self._cache[symbol] = {'ts': timestamp, 'pred': prediction}
+            
+        return prediction
 
     async def _run_model(self, model_key: str, name: str, features: dict):
         """Run a specific model in a thread pool."""

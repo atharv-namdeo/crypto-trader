@@ -11,13 +11,13 @@ class PortfolioRiskManager:
     """
 
     SECTORS = {
-        'L1': ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'NEAR/USDT', 'LTC/USDT', 'BCH/USDT', 'TRX/USDT'],
-        'L2': ['POL/USDT', 'ARB/USDT', 'OP/USDT'],
-        'DEFI': ['LINK/USDT', 'UNI/USDT', 'AAVE/USDT'],
-        'MEME': ['SHIB/USDT', 'DOGE/USDT'],
-        'PAYMENT': ['XRP/USDT', 'LTC/USDT', 'BCH/USDT'],
-        'ORACLE': ['LINK/USDT'],
-        'LEGACY': ['BTC/USDT']
+        'L1': ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'NEAR/USDT', 'LTC/USDT', 'BCH/USDT', 'TRX/USDT', 'XRP/USDT', 'LINK/USDT', 'ICP/USDT', 'APT/USDT', 'SUI/USDT'],
+        'L2': ['POL/USDT', 'ARB/USDT', 'OP/USDT', 'METIS/USDT', 'MANTA/USDT'],
+        'DEFI': ['LINK/USDT', 'UNI/USDT', 'AAVE/USDT', 'MKR/USDT', 'RUNE/USDT', 'DYDX/USDT', 'CRV/USDT', 'SNX/USDT'],
+        'MEME': ['SHIB/USDT', 'DOGE/USDT', 'PEPE/USDT', 'FLOKI/USDT', 'BONK/USDT', 'WIF/USDT'],
+        'PAYMENT': ['XRP/USDT', 'LTC/USDT', 'BCH/USDT', 'XLM/USDT'],
+        'AI': ['FET/USDT', 'AGIX/USDT', 'OCEAN/USDT', 'RNDR/USDT', 'NEAR/USDT'],
+        'STORAGE': ['FIL/USDT', 'AR/USDT'],
     }
 
     # Static correlation mapping (conservative estimates)
@@ -49,9 +49,8 @@ class PortfolioRiskManager:
         
         # 2. Sector Concentration
         sector = self.get_symbol_sector(symbol)
-        sector_usage = 0
-        sector_usage: float = 0.0 # Initialize as float
-        total_equity: float = 1000.0 # Default if not found
+        sector_usage: float = 0.0
+        total_equity: float = 1000.0 
         
         if self.risk_manager.state:
             val = await self.risk_manager.state.get_float('portfolio:value')

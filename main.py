@@ -137,20 +137,22 @@ async def daily_summary_loop(state: StateManager):
 async def ml_engine_loop(state: StateManager, ml_predictor: ParallelMLPredictor, perf_monitor: PerformanceMonitor, signal_tracker: SignalQualityTracker):
     """
     Main ML engine loop - updates ensemble predictions in Redis every 60s.
-    Also tracks performance latency and signal quality.
+    Parallelized for 50+ symbols.
     """
-    log.info("🧠 ML Engine Loop Started (with Monitoring)")
+    log.info("🧠 ML Engine Loop Started (Parallelized)")
     from config import SYMBOLS
-    while True:
-        try:
-            start_total = time.time()
-            for symbol in SYMBOLS:
-                # Get latest 1h candle data for features
+    
+    semaphore = asyncio.Semaphore(10) # Limit concurrent predictions
+
+    async def predict_single(symbol):
+        async with semaphore:
+            try:
                 df = await state.get_df(f"ohlcv:1h:{symbol}", n=100)
                 if df is None or df.empty:
-                    continue
-                
+                    return
+
                 price = float(df['close'].iloc[-1])
+                last_ts = float(df['timestamp'].iloc[-1].timestamp())
                 features = {
                     'open': float(df['open'].iloc[-1]),
                     'high': float(df['high'].iloc[-1]),
@@ -159,16 +161,13 @@ async def ml_engine_loop(state: StateManager, ml_predictor: ParallelMLPredictor,
                     'volume': float(df['volume'].iloc[-1]),
                 }
                 
-                # Run parallel prediction and track latency
                 start_pred = time.time()
-                prediction = await ml_predictor.predict_all(features, symbol)
+                prediction = await ml_predictor.predict_all(features, symbol, timestamp=last_ts)
                 latency_ms = (time.time() - start_pred) * 1000
                 perf_monitor.record_latency('ensemble', latency_ms)
 
-                # Store in Redis for strategies to consume
                 await state.set(f"ml_signal:{symbol}", prediction)
                 
-                # Record for quality tracking (1h, 4h, 1d evaluation)
                 await signal_tracker.record_signal(
                     symbol, 
                     prediction['signal'], 
@@ -176,12 +175,15 @@ async def ml_engine_loop(state: StateManager, ml_predictor: ParallelMLPredictor,
                     price, 
                     time.time()
                 )
-                
-                log.info(f"🧠 [{symbol}] Ensemble: {prediction['signal']} (Conf: {prediction['confidence']:.2%}) | Latency: {latency_ms:.1f}ms")
-            
-            # Record total loop latency
+            except Exception as e:
+                log.error(f"Prediction error for {symbol}: {e}")
+
+    while True:
+        try:
+            start_total = time.time()
+            tasks = [predict_single(symbol) for symbol in SYMBOLS]
+            await asyncio.gather(*tasks)
             perf_monitor.record_latency('total_loop', (time.time() - start_total) * 1000)
-                
         except Exception as e:
             log.error(f"ML Engine Error: {e}")
         await asyncio.sleep(60)
@@ -289,29 +291,27 @@ async def main():
     mean_revert = MeanReversionStrategy(state, pnl_tracker, manager=strategy_manager)
     ensemble_vote = EnsembleVotingStrategy(state, pnl_tracker, manager=strategy_manager)
 
-    # 5.1 Startup Checks (Paper 1 & 4) - Wrapped in task to prevent blocking
+    # 5.1 Startup Checks (Parallel)
     async def run_startup_checks():
-        log.info("🔍 Running startup Anomaly Detection...")
+        log.info("🔍 Running startup Anomaly Detection in parallel...")
         detector = AnomalyDetector()
-        for symbol in SYMBOLS:
+        
+        async def check_symbol(symbol):
             df_1h = await state.get_df(f"ohlcv:1h:{symbol}", n=100)
             if df_1h is not None:
                 res = detector.detect(df_1h['close'].tolist())
-                log.info(f"Anomaly Check [{symbol}]: Z={res['z_score']:.2f} {'(!!!)' if res['is_abnormal'] else '(Normal)'}")
+                if res['is_abnormal']:
+                    log.warning(f"Anomaly Check [{symbol}]: Z={res['z_score']:.2f} (!!! Abnormal)")
+
+        await asyncio.gather(*[check_symbol(s) for s in SYMBOLS])
     
     asyncio.create_task(run_startup_checks())
 
-    # 5.2 Background ML Tasks
+    # 5.2 Background ML Training (Multiprocessing)
     async def train_ml_models():
-        log.info("🔄 Background ML training started...")
-        rf_gb = RFGBPredictor()
-        boruta = BorutaSelector()
-        for symbol in SYMBOLS:
-            df_full = await state.get_df(f"ohlcv:1h:{symbol}", n=1000)
-            if df_full is not None:
-                await asyncio.get_event_loop().run_in_executor(None, rf_gb.train, df_full)
-                target = df_full['close'].shift(-1) > df_full['close']
-                await asyncio.get_event_loop().run_in_executor(None, boruta.select_features, df_full, target)
+        log.info("🔄 Background ML training started (Parallel)...")
+        from ml.trainer import train_all_models_parallel
+        await train_all_models_parallel(SYMBOLS)
         log.info("✅ Background ML training complete.")
 
     asyncio.create_task(train_ml_models())

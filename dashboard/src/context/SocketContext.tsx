@@ -42,6 +42,8 @@ export interface EngineData {
   latest_candles: any[];
   signal_heatmap: any[];
   status: string;
+  exchange?: string;
+  node?: string;
 }
 
 interface SocketContextType {

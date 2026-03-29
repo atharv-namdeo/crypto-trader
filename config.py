@@ -3,6 +3,7 @@ import logging
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 from typing import List, Optional, Dict
+from config_symbols import SYMBOL_CONFIG, CryptoTier
 
 load_dotenv()
 log = logging.getLogger("Config")
@@ -48,10 +49,24 @@ class Settings(BaseSettings):
     }
 
     # --- TRADING CONFIG ---
-    SYMBOLS: List[str] = [
-        'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT',
-        'POL/USDT', 'AVAX/USDT', 'LINK/USDT', 'UNI/USDT', 'DOT/USDT'
+    ACTIVE_TIERS: List[CryptoTier] = [
+        CryptoTier.TIER_1,
+        CryptoTier.TIER_2,
+        CryptoTier.TIER_3,
+        # CryptoTier.TIER_4  # Disable tier 4 (lowest liquidity) by default to save resources
     ]
+
+    @property
+    def SYMBOLS(self) -> List[str]:
+        """Dynamically build symbol list from active tiers"""
+        symbols = []
+        for tier in self.ACTIVE_TIERS:
+            symbols.extend(SYMBOL_CONFIG.get(tier, []))
+        return symbols
+
+    def get_symbols(self) -> List[str]:
+        """Helper to get symbols if property is not accessible easily"""
+        return self.SYMBOLS
     # UPDATED: Dictionary format as requested, plus extras for swing/position
     TIMEFRAMES: Dict[str, str] = {
         'scalper': '1m',

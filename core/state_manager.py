@@ -12,6 +12,8 @@ import asyncio
 import pandas as pd
 from typing import Any, Optional
 import os
+import gzip
+import base64
 from config import REDIS_URL
 
 log = logging.getLogger("StateManager")
@@ -49,19 +51,38 @@ class StateManager:
 
     # ── KEY/VALUE STORE ───────────────────────────────────────────────────
 
-    async def set(self, key: str, value: Any, expire_seconds: int = None):
-        """Store JSON-serializable value in Redis."""
+    async def set(self, key: str, value: Any, expire_seconds: int = None, compress: bool = False):
+        """Store JSON-serializable value in Redis, optionally with GZIP compression."""
         try:
             val_str = json.dumps(value)
+            if compress:
+                data_compressed = gzip.compress(val_str.encode())
+                # Use base64 if we want to store it in a decode_responses=True connection
+                # or better, use a separate connection for binary data. 
+                # For now, let's just store as string if possible or hex.
+                # Actually, decode_responses=True will fail with binary.
+                # I'll use base64 for compatibility with the current setup.
+                val_str = base64.b64encode(data_compressed).decode()
+                key = f"gz:{key}" # Prefix compressed keys
+            
             await self.redis.set(key, val_str, ex=expire_seconds)
         except Exception as e:
             log.error(f"Redis set error on {key}: {e}")
 
     async def get(self, key: str) -> Optional[Any]:
-        """Retrieve and deserialize JSON value from Redis."""
+        """Retrieve and deserialize JSON value from Redis, handling GZIP if prefixed."""
         try:
+            is_compressed = key.startswith("gz:")
             val_str = await self.redis.get(key)
+            if not val_str and not is_compressed:
+                # Try with gz: prefix just in case
+                val_str = await self.redis.get(f"gz:{key}")
+                if val_str: is_compressed = True
+            
             if val_str:
+                if is_compressed:
+                    data_compressed = base64.b64decode(val_str.encode())
+                    val_str = gzip.decompress(data_compressed).decode()
                 return json.loads(val_str)
             return None
         except Exception as e:
@@ -80,11 +101,11 @@ class StateManager:
 
     # ── PANDAS DATAFRAME HELPERS ──────────────────────────────────────────
 
-    async def set_df(self, key: str, df: pd.DataFrame, expire_seconds: int = None):
-        """Store Pandas DataFrame as JSON string (records orientation)."""
+    async def set_df(self, key: str, df: pd.DataFrame, expire_seconds: int = 3600):
+        """Store Pandas DataFrame with compression and default 1hr TTL."""
         try:
             df_json = df.to_dict(orient='records')
-            await self.set(key, df_json, expire_seconds)
+            await self.set(key, df_json, expire_seconds, compress=True)
         except Exception as e:
             log.error(f"Redis set_df error on {key}: {e}")
 
@@ -177,6 +198,9 @@ class MemoryMock:
     async def keys(self, p):
         clean_p = p.replace('*', '')
         return [k for k in self.storage if k.startswith(clean_p)]
+    async def delete(self, *keys): 
+        for k in keys:
+            if k in self.storage: del self.storage[k]
     async def lpush(self, k, v):
         if k not in self.storage: self.storage[k] = []
         self.storage[k].insert(0, v)
@@ -186,9 +210,8 @@ class MemoryMock:
     async def ping(self): return True
     async def close(self): pass
     def pipeline(self): return self
-    async def execute(self): 
-        # This is a very simple pipeline execute mock
-        return []
+    async def execute(self): return []
+    async def exists(self, k): return k in self.storage
     async def publish(self, c, m): pass
     def pubsub(self): return self
     async def subscribe(self, c): pass

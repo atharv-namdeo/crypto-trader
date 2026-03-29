@@ -89,7 +89,9 @@ const Sidebar = () => {
           <div className="flex items-center justify-between mb-3">
             <div className="flex flex-col">
               <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-tighter">Engine Core</span>
-              <span className="text-[11px] font-bold text-text-primary group-hover:text-accent-primary transition-colors">Bybit demo-node-01</span>
+              <span className="text-[11px] font-bold text-text-primary group-hover:text-accent-primary transition-colors">
+                {data?.node || 'Binance-Executor-01'}
+              </span>
             </div>
             <div className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-accent-success shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-accent-danger shadow-[0_0_10px_rgba(239,68,68,0.5)]'} animate-pulse`}></div>
           </div>

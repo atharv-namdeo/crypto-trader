@@ -57,10 +57,24 @@ def create_app(state: StateManager):
 
     @app.get("/api/v1/settings")
     async def get_settings():
+        settings_keys = [
+            "scalper_enabled", "scalper_threshold", 
+            "swing_enabled", "swing_threshold", 
+            "position_enabled", "position_threshold"
+        ]
         settings = {}
-        for key in ["scalper_enabled", "scalper_threshold", "swing_enabled", "swing_threshold", "position_enabled", "position_threshold"]:
+        for key in settings_keys:
             settings[key] = await state.get(f"settings:{key}")
         return {"data": settings}
+
+    @app.get("/api/v1/trades")
+    async def get_trades(limit: int = 50, offset: int = 0, symbol: str = None):
+        """Paginated trade history from Redis/Firebase."""
+        trades_raw = await state.redis.lrange('trade:history', offset, offset + limit - 1)
+        trades = [json.loads(t) for t in trades_raw]
+        if symbol:
+            trades = [t for t in trades if t.get('symbol') == symbol]
+        return {"data": trades, "count": len(trades)}
 
     @app.get("/api/v1/export/trades")
     async def export_trades():
@@ -143,6 +157,8 @@ def create_app(state: StateManager):
         await websocket.accept()
         log.info(f"✅ Dashboard WS connected")
         
+        from config import SYMBOLS, STRATEGY_ALLOCATIONS
+        
         try:
             while True:
                 if not state.redis:
@@ -150,11 +166,34 @@ def create_app(state: StateManager):
                     await asyncio.sleep(5)
                     continue
 
-                payload = {"type": "engine_update", "data": {}}
+                payload = {
+                    "type": "engine_update", 
+                    "data": {
+                        "market": {},
+                        "exchange": "Binance Demo",
+                        "node": "Binance-Executor-01",
+                        "sector_heat": {},
+                        "signal_heatmap": [],
+                        "strategies": {},
+                        "portfolio": {},
+                        "status": "ACTIVE",
+                        "positions": [],
+                        "orders": [],
+                        "signals": [],
+                        "trades": [],
+                        "equity_history": [],
+                        "logs": [],
+                        "latest_candles": {}
+                    }
+                }
+
+                # 0. Portfolio Metrics (Needed for allocation calcs)
+                total_value = float(await state.get_float("portfolio:total_value") or float(os.getenv("CAPITAL", 10000.0)))
                 
-                # 1. Market Data
+                # 1. Market Data (Top 10 only for WS to save bandwidth, or all if needed)
                 market_data = {}
-                for symbol in ["BTC/USDT", "ETH/USDT", "SOL/USDT"]:
+                display_symbols = SYMBOLS[:10] # Dashboard only needs top 10 real-time
+                for symbol in display_symbols:
                     price = float(await state.get_float(f"price:{symbol}") or 0.0)
                     change_24h = 0.0
                     df_24h = await state.get_df(f"ohlcv:1h:{symbol}", n=24)
@@ -173,16 +212,20 @@ def create_app(state: StateManager):
                         "price": price,
                         "change": change_24h,
                         "funding": float(await state.get_float(f"funding:{symbol}") or 0.0),
-                        "fuzzy": await state.get(f"fuzzy_scores:{symbol}") or {},
                         "signal": ml_data.get('signal', 'NEUTRAL'),
-                        "confidence": ml_data.get('confidence', 0.0) * 100, # Convert to pct
-                        "candles": {
-                            tf: (await state.get_df(f"ohlcv:{tf}:{symbol}", n=1)).to_dict(orient='records') 
-                            if (state.redis and await state.redis.exists(f"ohlcv:{tf}:{symbol}")) else []
-                            for tf in ["1m", "5m", "15m", "1h", "4h"]
-                        }
+                        "confidence": ml_data.get('confidence', 0.0) * 100, 
                     }
                 payload["data"]["market"] = market_data
+                
+                # 1.1 Sector Heatmap
+                from core.portfolio_risk_manager import PortfolioRiskManager
+                risk_mgr = PortfolioRiskManager(None) # Lightweight for sector mapping
+                sector_heat = {}
+                active_positions = await state.get("positions:active") or []
+                for pos in active_positions:
+                    sec = risk_mgr.get_symbol_sector(pos['symbol'])
+                    sector_heat[sec] = sector_heat.get(sec, 0.0) + float(pos.get('notional', 0.0))
+                payload["data"]["sector_heat"] = sector_heat
                 
                 # Signal Heatmap (mock or real distribution)
                 payload["data"]["signal_heatmap"] = await state.get("ml:signal_heatmap") or []
@@ -196,8 +239,8 @@ def create_app(state: StateManager):
                     wins = int(await state.get(f"stats:{s}:wins") or 0)
                     win_rate = (wins / trades * 100) if trades > 0 else 0.0
                     
-                    # Get allocation from settings
-                    allocation_pct = settings.STRATEGY_ALLOCATIONS.get(s, 0.10)
+                    # Get allocation from config
+                    allocation_pct = STRATEGY_ALLOCATIONS.get(s, 0.10)
                     allocated_capital = total_value * allocation_pct
                     
                     strategies[s] = {
@@ -207,14 +250,13 @@ def create_app(state: StateManager):
                         "trades": trades,
                         "active_positions": pos_count,
                         "status": await state.get(f"engine:status:{s}") or ("ACTIVE" if pos_count > 0 else "SCANNING"),
-                        "allocated": round(allocated_capital, 2),
-                        "avg_hold": await state.get(f"stats:{s}:avg_hold") or ("12m" if s == "scalper" else "4h" if s == "swing" else "1d"),
-                        "last_trade": await state.get(f"stats:{s}:last_trade") or "N/A"
+                        "allocated": 0, # To be computed 
+                        "avg_hold": "N/A",
+                        "last_trade": "N/A"
                     }
                 payload["data"]["strategies"] = strategies
                 
-                # 3. Portfolio Metrics
-                total_value = float(await state.get_float("portfolio:total_value") or float(os.getenv("CAPITAL", 10000.0)))
+                # 3. Portfolio Metrics (Already fetched above)
                 sharpe = float(await state.get_float("metrics:sharpe") or 0.0)
                 drawdown = float(await state.get_float("metrics:drawdown") or 0.0)
                 win_rate = float(await state.get_float("metrics:winrate") or 0.0)
