@@ -142,8 +142,11 @@ def get_exchange(use_testnet=True):
         },
     })
     
+    # --- SET TESTNET ENDPOINT IF USING TESTNET ---
     if use_testnet:
-        log.info("✅ Using Binance Testnet/Demo Account")
+        exchange.urls['api']['future'] = 'https://testnet.binancefuture.com'
+        exchange.urls['api']['spot'] = 'https://testnet.binance.vision/api'
+        log.info("✅ Using Binance Testnet Endpoint (testnet.binancefuture.com)")
     else:
         log.warning("⚠️ LIVE REAL ACCOUNT MODE - USE WITH CAUTION")
     
