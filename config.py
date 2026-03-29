@@ -91,7 +91,7 @@ TIMEFRAMES = settings.TIMEFRAMES
 
 def get_exchange(use_testnet=True):
     """
-    Initialize Binance exchange - uses TEST keys if available, falls back to DEMO
+    Initialize Binance exchange with correct demo.binance.com endpoint
     """
     import ccxt.async_support as ccxt
     
@@ -111,26 +111,11 @@ def get_exchange(use_testnet=True):
         api_key = settings.BINANCE_REAL_API_KEY or settings.BINANCE_API_KEY
         api_secret = settings.BINANCE_REAL_API_SECRET or settings.BINANCE_API_SECRET
     
-    # --- VALIDATE: Check credentials exist ---
     if not api_key or not api_secret:
-        error_msg = (
-            "❌ Missing Binance API credentials!\n"
-            "Set these in Railway variables (at least one pair):\n"
-            "  Option 1 (Recommended Demo Account):\n"
-            "    - BINANCE_DEMO_API_KEY\n"
-            "    - BINANCE_DEMO_API_SECRET\n"
-            "    Get from: https://testnet.binance.vision/\n\n"
-            "  Option 2 (Testnet):\n"
-            "    - BINANCE_TEST_API_KEY\n"
-            "    - BINANCE_TEST_API_SECRET\n\n"
-            "  Option 3 (Generic):\n"
-            "    - BINANCE_API_KEY\n"
-            "    - BINANCE_API_SECRET"
-        )
+        error_msg = "❌ Missing Binance API credentials!"
         log.error(error_msg)
         raise ValueError(error_msg)
     
-    # Create exchange instance
     exchange = ccxt.binance({
         'apiKey': api_key,
         'secret': api_secret,
@@ -138,15 +123,17 @@ def get_exchange(use_testnet=True):
         'options': {
             'defaultType': 'future',
             'adjustForTimeDifference': True,
-            'recvWindow': 10000
+            'recvWindow': 10000,
         },
     })
     
-    # --- SET TESTNET ENDPOINT IF USING TESTNET ---
+    # SET CORRECT DEMO ENDPOINT
     if use_testnet:
-        exchange.urls['api']['future'] = 'https://testnet.binancefuture.com'
-        exchange.urls['api']['spot'] = 'https://testnet.binance.vision/api'
-        log.info("✅ Using Binance Testnet Endpoint (testnet.binancefuture.com)")
+        exchange.urls['api']['fapi'] = 'https://demo.binance.com'
+        exchange.urls['api']['fapiPublic'] = 'https://demo.binance.com'
+        exchange.urls['api']['fapiPrivate'] = 'https://demo.binance.com'
+        exchange.urls['www'] = 'https://demo.binance.com'
+        log.info("✅ Using Binance Demo Account (demo.binance.com)")
     else:
         log.warning("⚠️ LIVE REAL ACCOUNT MODE - USE WITH CAUTION")
     
