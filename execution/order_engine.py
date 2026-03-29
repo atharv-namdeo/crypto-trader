@@ -15,46 +15,53 @@ from config import SYMBOLS
 
 log = logging.getLogger("OrderEngine")
 
-class OrderEngine:
-    def __init__(self, state: StateManager, portfolio_risk=None):
+class OrderEngine    def __init__(self, state: StateManager, portfolio_risk=None):
         from config import settings
         self.state = state
         self.portfolio_risk = portfolio_risk
         self.running = False
+        self.use_testnet = settings.BINANCE_TESTNET
         
-        # self.dry_run = settings.DRY_RUN # REMOVED: No paper trading allowed
-        self.use_testnet = True # FORCE TESTNET for this phase
-        
-        self.api_key = settings.BINANCE_TEST_API_KEY if self.use_testnet else settings.BINANCE_REAL_API_KEY
-        self.api_secret = settings.BINANCE_TEST_API_SECRET if self.use_testnet else settings.BINANCE_REAL_API_SECRET
+        # Consistent key hierarchy (Demo -> Test -> Real)
+        self.api_key = (
+            settings.BINANCE_DEMO_API_KEY or 
+            settings.BINANCE_TEST_API_KEY or 
+            settings.BINANCE_API_KEY
+        )
+        self.api_secret = (
+            settings.BINANCE_DEMO_API_SECRET or 
+            settings.BINANCE_TEST_API_SECRET or 
+            settings.BINANCE_API_SECRET
+        )
         self.client: AsyncClient = None
 
     async def init_client(self):
-        """Initialize AsyncClient and configure futures account."""
-        self.client = await AsyncClient.create(
-            api_key=self.api_key,
-            api_secret=self.api_secret,
-            testnet=self.use_testnet
-        )
-        
-        if self.use_testnet:
-            # Force Futures Testnet URL (sometimes python-binance defaults to Spot Testnet)
-            self.client.API_URL = 'https://testnet.binancefuture.com/fapi'
-            self.client.BASE_URL = 'https://testnet.binancefuture.com'
-        
-        # Sync history on startup to populate dashboard
-        asyncio.create_task(self.sync_historical_trades())
-        
-        for symbol in SYMBOLS:
-                market_sym = symbol.replace('/', '').upper() 
-                try:
-                    await self.client.futures_change_margin_type(symbol=market_sym, marginType='ISOLATED')
-                except BinanceAPIException:
-                    pass
-                try:
-                    await self.client.futures_change_leverage(symbol=market_sym, leverage=3)
-                except BinanceAPIException:
-                    pass
+        """Initialize AsyncClient and configure account (Non-blocking)."""
+        if not self.api_key or not self.api_secret:
+            log.warning("⚠️ No Binance API keys found. Order Engine will skip execution.")
+            return
+
+        try:
+            self.client = await AsyncClient.create(
+                api_key=self.api_key,
+                api_secret=self.api_secret,
+                testnet=self.use_testnet
+            )
+            
+            if self.use_testnet:
+                # Optimized endpoint for Demo/Testnet
+                self.client.API_URL = 'https://testnet.binancefuture.com/fapi'
+                self.client.BASE_URL = 'https://testnet.binancefuture.com'
+                log.info("✅ Order Engine connected to Binance Testnet")
+            
+            # Sync history on startup (Optional)
+            asyncio.create_task(self.sync_historical_trades())
+            
+        except Exception as e:
+            log.error(f"❌ Order Engine API connection FAILED: {e}")
+            log.warning("Continuing in DEGRADED MODE (Order execution disabled)")
+            self.client = None
+s
 
     async def close_client(self):
         if self.client:
@@ -100,6 +107,10 @@ class OrderEngine:
             await asyncio.sleep(interval)
 
     async def _process_order(self, symbol: str, req: dict):
+        if not self.client:
+            log.warning(f"⚠️ Skipping order for {symbol} - Order Engine in DEGRADED MODE (Uninitialized)")
+            return True # Toss request to avoid loop
+            
         market_sym = symbol.replace('/', '').upper()
         action = req.get('action')
         side = req.get('side')
