@@ -91,7 +91,7 @@ TIMEFRAMES = settings.TIMEFRAMES
 
 def get_exchange(use_testnet=True):
     """
-    Initialize Binance exchange with correct demo.binance.com endpoint
+    Initialize Binance exchange for SPOT trading on demo mode
     """
     import ccxt.async_support as ccxt
     
@@ -121,19 +121,16 @@ def get_exchange(use_testnet=True):
         'secret': api_secret,
         'enableRateLimit': True,
         'options': {
-            'defaultType': 'future',
+            'defaultType': 'spot',  # ← CHANGED TO SPOT FOR STABLE DEMO
             'adjustForTimeDifference': True,
             'recvWindow': 10000,
         },
     })
     
-    # SET CORRECT DEMO ENDPOINT
+    # SET CORRECT DEMO ENDPOINT FOR SPOT
     if use_testnet:
-        exchange.urls['api']['fapi'] = 'https://demo.binance.com'
-        exchange.urls['api']['fapiPublic'] = 'https://demo.binance.com'
-        exchange.urls['api']['fapiPrivate'] = 'https://demo.binance.com'
-        exchange.urls['www'] = 'https://demo.binance.com'
-        log.info("✅ Using Binance Demo Account (demo.binance.com)")
+        exchange.urls['api']['spot'] = 'https://demo-api.binance.com/api'
+        log.info("✅ Using Binance Demo Account SPOT (demo-api.binance.com)")
     else:
         log.warning("⚠️ LIVE REAL ACCOUNT MODE - USE WITH CAUTION")
     
