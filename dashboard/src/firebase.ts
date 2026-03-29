@@ -1,11 +1,12 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getDatabase } from "firebase/database";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
     apiKey: "AIzaSyBtkOrp9Iizskp9-7KmFS8SsPpEMFWkfSs",
     authDomain: "quant-ac5b9.firebaseapp.com",
+    databaseURL: "https://quant-ac5b9-default-rtdb.firebaseio.com",
     projectId: "quant-ac5b9",
     storageBucket: "quant-ac5b9.firebasestorage.app",
     messagingSenderId: "229378767288",
@@ -16,3 +17,4 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+export const rtdb = getDatabase(app);

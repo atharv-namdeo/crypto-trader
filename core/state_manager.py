@@ -15,6 +15,7 @@ import os
 import gzip
 import base64
 from config import REDIS_URL
+from core.firebase_manager import FirebaseManager
 
 log = logging.getLogger("StateManager")
 
@@ -25,6 +26,7 @@ class StateManager:
         self.url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
         self.redis: Optional[Any] = None
         self._pubsub: Optional[Any] = None
+        self.firebase = FirebaseManager()
 
     async def connect(self):
         """Establish Redis connection with retry logic."""
@@ -66,8 +68,68 @@ class StateManager:
                 key = f"gz:{key}" # Prefix compressed keys
             
             await self.redis.set(key, val_str, ex=expire_seconds)
+            
+            # --- MISSION CRITICAL: FIREBASE MIRRORING ---
+            await self._mirror_to_firebase(key, value)
+            
         except Exception as e:
             log.error(f"Redis set error on {key}: {e}")
+
+    async def _mirror_to_firebase(self, key: str, value: Any):
+        """Sync high-level state to Firebase for Cloud Dashboard visibility."""
+        try:
+            # 1. Price & Confidence Updates
+            if key.startswith("price:"):
+                symbol = key.split(":")[1]
+                # Async get confidence if available
+                conf_val = await self.redis.get(f"ensemble_confidence:{symbol}")
+                conf = float(conf_val) if conf_val else 0
+                
+                self.firebase.update(f"market/prices/{symbol}", {
+                    "current_price": value,
+                    "confidence": conf * 100, # Percentage for dashboard
+                    "timestamp": int(asyncio.get_event_loop().time() * 1000)
+                })
+            
+            # 2. Strategy Signals
+            elif key.startswith("ml_signal:") or key.startswith("ensemble_signal:"):
+                symbol = key.split(":")[1]
+                self.firebase.set(f"trading/signals/{symbol}", value)
+            
+            # 3. Fuzzy Scores (Advanced Signals)
+            elif key.startswith("fuzzy:"):
+                symbol = key.split(":")[1]
+                self.firebase.set(f"market/fuzzy/{symbol}", value)
+            
+            # 4. Engine Status
+            elif key == "engine:status":
+                self.firebase.set("status/label", value)
+            elif key == "engine:exchange":
+                self.firebase.set("status/exchange", value)
+                
+            # 5. Portfolio Metrics
+            elif key.startswith("portfolio:"):
+                metric_name = key.split(":")[1]
+                self.firebase.set(f"analytics/performance/summary/{metric_name}", value)
+            
+            # 6. Strategy Stats
+            elif key.startswith("stats:"):
+                parts = key.split(":")
+                if len(parts) >= 3:
+                    strategy = parts[1]
+                    metric = parts[2]
+                    self.firebase.set(f"trading/strategies/{strategy}/{metric}", value)
+            
+            # 7. Aggregated Positions
+            elif key == "positions:active":
+                self.firebase.set("trading/positions_active", value)
+                
+            # 8. Active Orders
+            elif key == "orders:active":
+                self.firebase.set("trading/orders_active", value)
+
+        except Exception as e:
+            log.debug(f"Firebase mirror skip for {key}: {e}")
 
     async def get(self, key: str) -> Optional[Any]:
         """Retrieve and deserialize JSON value from Redis, handling GZIP if prefixed."""
@@ -140,6 +202,8 @@ class StateManager:
 
     async def set_position(self, symbol: str, position: dict):
         await self.redis.set(f"position:{symbol}", json.dumps(position))
+        # Sync position to Firebase
+        self.firebase.set(f"trading/positions/{symbol}", position)
 
     async def get_position(self, symbol: str):
         data = await self.redis.get(f"position:{symbol}")

@@ -22,8 +22,8 @@ class OrderEngine:
         self.portfolio_risk = portfolio_risk
         self.running = False
         
-        self.dry_run = settings.DRY_RUN
-        self.use_testnet = settings.BINANCE_TESTNET
+        # self.dry_run = settings.DRY_RUN # REMOVED: No paper trading allowed
+        self.use_testnet = True # FORCE TESTNET for this phase
         
         self.api_key = settings.BINANCE_TEST_API_KEY if self.use_testnet else settings.BINANCE_REAL_API_KEY
         self.api_secret = settings.BINANCE_TEST_API_SECRET if self.use_testnet else settings.BINANCE_REAL_API_SECRET
@@ -42,11 +42,10 @@ class OrderEngine:
             self.client.API_URL = 'https://testnet.binancefuture.com/fapi'
             self.client.BASE_URL = 'https://testnet.binancefuture.com'
         
-        if not self.dry_run:
-            # Sync history on startup to populate dashboard
-            asyncio.create_task(self.sync_historical_trades())
-            
-            for symbol in SYMBOLS:
+        # Sync history on startup to populate dashboard
+        asyncio.create_task(self.sync_historical_trades())
+        
+        for symbol in SYMBOLS:
                 market_sym = symbol.replace('/', '').upper() 
                 try:
                     await self.client.futures_change_margin_type(symbol=market_sym, marginType='ISOLATED')
@@ -69,11 +68,10 @@ class OrderEngine:
         loops = 0
         while self.running:
             try:
-                if not self.dry_run:
-                    if not self.client:
-                        await self.init_client()
-                    
-                    if loops % 60 == 0:
+                if not self.client:
+                    await self.init_client()
+                
+                if loops % 60 == 0:
                         try:
                             acc = await self.client.futures_account()
                             await self.state.set('binance:account', acc)
@@ -107,11 +105,6 @@ class OrderEngine:
         side = req.get('side')
         qty = float(req.get('qty', 0))
         price = float(req.get('price', 0))
-
-        if self.dry_run:
-            log.info(f"📝 PAPER TRADE: {side} {market_sym} qty={qty}")
-            await self._log_signal(price, side, action, req.get('strategy', 'AI'))
-            return True
 
         try:
             # 0. Validate and Round
@@ -262,6 +255,19 @@ class OrderEngine:
         )
         log.info(f"[TESTNET FILLED] order_id={main_order['orderId']}")
 
+        # --- FIREBASE SYNC: Order Record ---
+        self.state.firebase.set(f"trading/orders/{main_order['orderId']}", {
+            "symbol": symbol,
+            "type": "MARKET",
+            "side": main_side,
+            "quantity": qty,
+            "price": float(main_order.get('avgPrice', price)),
+            "status": "FILLED",
+            "timestamp": int(main_order['updateTime']),
+            "binance_order_id": main_order['orderId'],
+            "strategy": strategy
+        })
+
         exit_side = 'SELL' if side == 'LONG' else 'BUY'
 
         if stop and stop > 0:
@@ -308,3 +314,21 @@ class OrderEngine:
                 raise e
         
         await self.client.futures_cancel_all_open_orders(symbol=symbol)
+
+    async def get_active_orders(self) -> list:
+        """Fetch all open orders from Binance Futures."""
+        try:
+            if not self.client: await self.init_client()
+            orders = await self.client.futures_get_open_orders()
+            return [{
+                "symbol": o['symbol'],
+                "id": o['orderId'],
+                "side": o['side'],
+                "type": o['type'],
+                "price": float(o['price']),
+                "qty": float(o['origQty']),
+                "time": o['updateTime']
+            } for o in orders]
+        except Exception as e:
+            log.error(f"Error fetching active orders: {e}")
+            return []

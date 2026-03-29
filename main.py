@@ -24,12 +24,8 @@ from core.risk_guardian import RiskGuardian
 from execution.order_engine import OrderEngine
 from core.pnl_tracker import PnLTracker
 
-from core.strategies.scalper import ScalperStrategy
-from core.strategies.swing import SwingStrategy
-from core.strategies.position import PositionStrategy
-from core.strategies.ai_ensemble_strategy import AIEnsembleStrategy
-from core.strategies.mean_reversion import MeanReversionStrategy
-from core.strategies.ensemble_voting import EnsembleVotingStrategy
+from core.strategies.ensemble_algorithm import EnsembleAlgorithm
+from core.enterprise_engine import EnterpriseTradingEngine
 from ml.anomaly_detector import AnomalyDetector
 from ml.boruta_selector import BorutaSelector
 from ml.rf_gb_predictor import RFGBPredictor
@@ -237,6 +233,9 @@ async def main():
         if await state.get(f"settings:{k}") is None:
             await state.set(f"settings:{k}", v)
 
+    await state.set("engine:exchange", "Binance Testnet")
+    await state.set("engine:status", "Operational")
+
     # 4. Initialize Data Sources & Shared State
     ws_feed     = WebSocketManager(SYMBOLS, state)
     # CandleFeedManager replaced by MultiAssetDataManager in Phase 8
@@ -257,12 +256,14 @@ async def main():
     dash_sync = DashboardSynchronizer(state)
     
     # --- PHASE 7: EXECUTION TOOLS ---
-    alert_system = AlertSystem(state)
-    rollout = GraduatedRollout(state, start_capital=float(CAPITAL))
     auto_tuner = StrategyAutoTuner(state)
+    
+    # --- PHASE 22: ENTERPRISE TRADING ENGINE ---
+    enterprise_engine = EnterpriseTradingEngine(state, order_engine)
     
     # --- PHASE 22: MULTI-STRATEGY MANAGER ---
     # Use the Graduated Rollout pos size as our baseline total capital
+    rollout = GraduatedRollout(state)
     baseline_cap = await rollout.get_position_size()
     strategy_manager = MultiStrategyManager(state, total_capital=baseline_cap)
     
@@ -279,17 +280,8 @@ async def main():
     # Give API a moment to bind
     await asyncio.sleep(1)
 
-    # 5. Init Parallel Strategies (Using Multi-Strategy Manager)
-    log.info(f"💰 Multi-Strategy Execution Active | Total Capital: ${baseline_cap:.2f}")
-    
-    scalper  = ScalperStrategy(state, pnl_tracker, manager=strategy_manager)
-    swing    = SwingStrategy(state, pnl_tracker, manager=strategy_manager)
-    position = PositionStrategy(state, pnl_tracker, manager=strategy_manager)
-    ai_ensemble = AIEnsembleStrategy(state, pnl_tracker, manager=strategy_manager)
-    
-    # Keep legacy/standalone for now if needed, or pass manager if refactored
-    mean_revert = MeanReversionStrategy(state, pnl_tracker, manager=strategy_manager)
-    ensemble_vote = EnsembleVotingStrategy(state, pnl_tracker, manager=strategy_manager)
+    # 5. Init (Redundant standalone strategies removed)
+    log.info(f"💰 Enterprise Execution Engine Loading | Capital Baseline: ${baseline_cap:.2f}")
 
     # 5.1 Startup Checks (Parallel)
     async def run_startup_checks():
@@ -327,13 +319,8 @@ async def main():
         asyncio.create_task(data_manager.run_loop(interval_seconds=60), name="DATA_MGR"),
         asyncio.create_task(features.run_forever(interval_s=1), name="FEAT_ENG"),
         
-        # Strategy Tasks
-        asyncio.create_task(scalper.run_loop(), name="SCALPER"),
-        asyncio.create_task(swing.run_loop(), name="SWING"),
-        asyncio.create_task(position.run_loop(), name="POSITION"),
-        asyncio.create_task(ai_ensemble.run_loop(), name="AI_ENSEMBLE"),
-        asyncio.create_task(mean_revert.run(), name="MEAN_REVERT"),
-        asyncio.create_task(ensemble_vote.run(), name="ENSEMBLE_VOTE"),
+        # Enterprise Engine Task
+        asyncio.create_task(enterprise_engine.start(), name="ENTERPRISE_ENG"),
         asyncio.create_task(ml_engine_loop(state, ml_predictor, perf_monitor, signal_tracker), name="ML_ENGINE"),
         asyncio.create_task(perf_monitor.log_stats_periodically(300), name="PERF_STATS"),
         
@@ -353,7 +340,7 @@ async def main():
 
     # Graceful shutdown handler
     loop = asyncio.get_event_loop()
-    components = [ws_feed, data_manager, features, risk_guardian, order_engine, scalper, swing, position, dash_sync]
+    components = [ws_feed, data_manager, features, risk_guardian, order_engine, dash_sync, enterprise_engine]
     for sig in (signal.SIGINT, signal.SIGTERM):
         with suppress(NotImplementedError):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(tasks, *components)))
