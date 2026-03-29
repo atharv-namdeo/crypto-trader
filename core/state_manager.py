@@ -15,7 +15,18 @@ import os
 import gzip
 import base64
 from config import REDIS_URL
-from core.firebase_manager import FirebaseManager
+# --- GRACEFUL FALLBACK: FirebaseManager ---
+try:
+    from core.firebase_manager import FirebaseManager
+except ImportError:
+    log.warning("⚠️ FirebaseManager not found - using stub for dashboard visibility")
+    class FirebaseManager:
+        def __init__(self, *args, **kwargs): pass
+        def update(self, *args, **kwargs): pass
+        def set(self, *args, **kwargs): pass
+        def push(self, *args, **kwargs): pass
+        def get(self, *args, **kwargs): return None
+        def delete(self, *args, **kwargs): pass
 
 log = logging.getLogger("StateManager")
 

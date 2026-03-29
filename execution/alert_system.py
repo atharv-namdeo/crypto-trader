@@ -15,7 +15,7 @@ class AlertSystem:
     
     def __init__(self, state: StateManager):
         self.state = state
-        self.telegram_token = os.getenv('TELEGRAM_TOKEN')
+        self.telegram_token = os.getenv('TELEGRAM_BOT_TOKEN')
         self.telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
     
     async def send_alert(self, level: str, title: str, message: str, data: dict = None):

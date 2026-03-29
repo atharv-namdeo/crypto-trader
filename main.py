@@ -275,6 +275,9 @@ async def main():
     report_scheduler = ReportScheduler(state)
     report_scheduler.start()
 
+    # Initialize Alert System
+    alert_system = AlertSystem(state)
+
     # --- START API IMMEDIATELY FOR HEALTH CHECKS ---
     api_task = asyncio.create_task(start_api_server(state))
     # Give API a moment to bind

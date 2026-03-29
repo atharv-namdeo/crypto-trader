@@ -106,6 +106,18 @@ def get_exchange(use_testnet=True):
         api_key = settings.BINANCE_REAL_API_KEY or settings.BINANCE_API_KEY
         api_secret = settings.BINANCE_REAL_API_SECRET or settings.BINANCE_API_SECRET
     
+    # --- VALIDATE: Check credentials exist ---
+    if not api_key or not api_secret:
+        error_msg = (
+            "❌ Missing Binance API credentials!\n"
+            "Set these in Railway variables:\n"
+            "  - BINANCE_DEMO_API_KEY\n"
+            "  - BINANCE_DEMO_API_SECRET\n"
+            "Get them from: https://testnet.binance.vision/"
+        )
+        log.error(error_msg)
+        raise ValueError(error_msg)
+    
     # Create exchange instance
     exchange = ccxt.binance({
         'apiKey': api_key,
