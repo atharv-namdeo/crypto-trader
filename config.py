@@ -91,7 +91,7 @@ TIMEFRAMES = settings.TIMEFRAMES
 
 def get_exchange(use_testnet=True):
     """
-    Initialize Binance exchange for SPOT trading on demo mode
+    Initialize Binance SPOT demo trading
     """
     import ccxt.async_support as ccxt
     
@@ -120,10 +120,12 @@ def get_exchange(use_testnet=True):
         'apiKey': api_key,
         'secret': api_secret,
         'enableRateLimit': True,
+        'sandbox': use_testnet,  # ← USE SANDBOX MODE TO BYPASS RESTRICTED LOCATIONS
         'options': {
-            'defaultType': 'spot',  # ← CHANGED TO SPOT FOR STABLE DEMO
+            'defaultType': 'spot',
             'adjustForTimeDifference': True,
             'recvWindow': 10000,
+            'fetchMyTradesMethod': 'private', # Avoid /sapi/ calls that leak to live API
         },
     })
     
