@@ -56,6 +56,16 @@ VOL_MULT         = 1.2          # Volume must be above this × 20-bar average
 LONG_ONLY        = True         # Set to False to allow short trades too
 DEFAULT_DAYS     = 60           # History window in days
 
+# Warmup buffer — extra bars beyond the longest indicator period to ensure
+# all rolling windows are fully initialised before we start trading.
+WARMUP_BUFFER    = 5
+
+# Minimum capital floor (prevents division-by-zero and unrealistic sizing)
+MIN_CAPITAL      = 0.01
+
+# Annualisation factor for hourly crypto Sharpe (crypto trades 24/7/365)
+SHARPE_ANNUALISE = 365 * 24     # = 8760 hourly bars per year
+
 
 # ---------------------------------------------------------------------------
 # Indicator helpers (standalone — no external deps beyond pandas/numpy)
@@ -101,9 +111,8 @@ def _synthetic_ohlcv(n_bars: int = 1500, start_price: float = 40000.0,
                      drift: float = 0.0002, vol: float = 0.012,
                      seed: int = 42) -> pd.DataFrame:
     """
-    Generate realistic synthetic OHLCV for offline testing.
-    Uses geometric Brownian motion with random walk + mean-reverting volatility.
-    Only used when Binance cannot be reached.
+    Generate synthetic OHLCV for offline testing using geometric Brownian motion
+    with constant volatility.  Only used when Binance cannot be reached.
     """
     rng   = np.random.default_rng(seed)
     dates = pd.date_range('2024-01-01', periods=n_bars, freq='1h')
@@ -124,9 +133,16 @@ def _synthetic_ohlcv(n_bars: int = 1500, start_price: float = 40000.0,
 def fetch_ohlcv(symbol: str, timeframe: str = '1h', days: int = DEFAULT_DAYS) -> pd.DataFrame:
     """
     Fetch OHLCV data from Binance public REST endpoint.
+    Binance returns at most 1000 candles per call (~41 days at 1h resolution).
     Falls back to synthetic data if Binance is unreachable (useful for offline testing).
     """
-    limit = min(days * 24, 1000)   # 1h bars; Binance max is 1000
+    limit    = days * 24           # requested hourly bars
+    max_bars = 1000                # Binance per-request hard cap
+    if limit > max_bars:
+        actual_days = max_bars // 24
+        print(f"⚠️   Requested {days} days ({limit} bars) but Binance returns at most "
+              f"{max_bars} bars (~{actual_days} days) per call. Fetching {max_bars} bars.")
+        limit = max_bars
     try:
         exchange = ccxt.binance({'enableRateLimit': True})
         ohlcv    = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
@@ -214,7 +230,7 @@ def run_backtest(symbol: str, days: int = DEFAULT_DAYS, timeframe: str = '1h') -
         print(f"❌  Failed to fetch data for {symbol}: {exc}")
         return {}
 
-    warmup = max(EMA_TREND, ADX_PERIOD, RSI_PERIOD, VOL_LOOKBACK) + 5  # ≈ 55 bars
+    warmup = max(EMA_TREND, ADX_PERIOD, RSI_PERIOD, VOL_LOOKBACK) + WARMUP_BUFFER  # ≈ 55 bars
     if len(df) < warmup + 10:
         print(f"⚠️   Not enough data ({len(df)} bars). Need >{warmup}.")
         return {}
@@ -278,7 +294,7 @@ def run_backtest(symbol: str, days: int = DEFAULT_DAYS, timeframe: str = '1h') -
                 net_pnl   = gross_pnl - exit_fee
 
                 capital  += net_pnl
-                capital   = max(capital, 0.01)  # prevent negative capital
+                capital   = max(capital, MIN_CAPITAL)  # prevent negative capital
 
                 trades.append({
                     'symbol':     symbol,
@@ -361,7 +377,7 @@ def run_backtest(symbol: str, days: int = DEFAULT_DAYS, timeframe: str = '1h') -
 
     equity_s  = pd.Series(equity)
     returns_s = equity_s.pct_change().dropna()
-    sharpe    = (returns_s.mean() / (returns_s.std() + 1e-9)) * np.sqrt(252 * 24) if len(returns_s) > 1 else 0
+    sharpe    = (returns_s.mean() / (returns_s.std() + 1e-9)) * np.sqrt(SHARPE_ANNUALISE) if len(returns_s) > 1 else 0
 
     running_max = equity_s.cummax()
     drawdowns   = (running_max - equity_s) / (running_max + 1e-9)
@@ -407,10 +423,10 @@ def run_backtest(symbol: str, days: int = DEFAULT_DAYS, timeframe: str = '1h') -
     if n_trades > 0:
         print("\n📌  Exit Breakdown:")
         for reason, grp in df_t.groupby('reason'):
-            r_pf   = grp[grp['net_pnl'] > 0]['net_pnl'].sum()
-            r_pl   = abs(grp[grp['net_pnl'] < 0]['net_pnl'].sum())
-            r_net  = grp['net_pnl'].sum()
-            print(f"   {reason:<18} {len(grp):3d} trades   net PnL: ${r_net:+.2f}")
+            reason_profit = grp[grp['net_pnl'] > 0]['net_pnl'].sum()
+            reason_loss   = abs(grp[grp['net_pnl'] < 0]['net_pnl'].sum())
+            reason_net    = grp['net_pnl'].sum()
+            print(f"   {reason:<18} {len(grp):3d} trades   net PnL: ${reason_net:+.2f}")
 
     return metrics
 
