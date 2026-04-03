@@ -1,0 +1,60 @@
+{
+    "market": {
+        "prices": {},
+        "fuzzy": {}
+    },
+    "trading": {
+        "positions": {},
+        "positions_active": [],
+        "orders_active": [],
+        "signals": {},
+        "strategies": {
+            "scalper": {
+                "trades": 0,
+                "wins": 0,
+                "pnl": 0.0,
+                "pos_count": 0
+            },
+            "swing": {
+                "trades": 0,
+                "wins": 0,
+                "pnl": 0.0,
+                "pos_count": 0
+            },
+            "position": {
+                "trades": 0,
+                "wins": 0,
+                "pnl": 0.0,
+                "pos_count": 0
+            },
+            "ai_ensemble": {
+                "trades": 0,
+                "wins": 0,
+                "pnl": 0.0,
+                "pos_count": 0
+            }
+        }
+    },
+    "analytics": {
+        "performance": {
+            "summary": {
+                "total_value": 1000.0,
+                "daily_pnl": 0.0,
+                "sharpe": 0.0,
+                "drawdown": 0.0,
+                "win_rate": 0.0
+            }
+        }
+    },
+    "status": {
+        "label": "Operational",
+        "exchange": "Binance Testnet"
+    },
+    "trades": {},
+    "verification": {
+        "test_node": {
+            "status": "success",
+            "timestamp": 123456
+        }
+    }
+}

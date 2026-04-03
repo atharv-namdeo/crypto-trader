@@ -78,12 +78,14 @@ def create_app(state: StateManager):
 
     @app.get("/api/v1/export/trades")
     async def export_trades():
-        """Export all trades from Firebase as CSV"""
-        from utils.firebase_client import get_all_trades
-        trades = get_all_trades()
+        """Export all trades from local JSON DB as CSV"""
+        from core.firebase_manager import FirebaseManager
+        fm = FirebaseManager()
+        trades_dict = fm.get("trades") or {}
+        trades = list(trades_dict.values()) if isinstance(trades_dict, dict) else []
         
         if not trades:
-            return {"status": "error", "message": "No trades found in Firebase"}
+            return {"status": "error", "message": "No trades found in local database"}
 
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=trades[0].keys() if trades else [])

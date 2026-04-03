@@ -13,12 +13,20 @@ class PnLTracker:
         self.log = log
 
     async def record_trade(self, strategy: str, symbol: str, side: str, entry: float, exit_price: float, qty: float, reason: str):
-        pnl_usd = (exit_price - entry) * qty if side == 'LONG' else (entry - exit_price) * qty
-        is_win = pnl_usd > 0
+        # 1. Calculate Costs (Binance Futures Default: 0.04% Taker)
+        fee_rate = 0.0004
+        entry_notional = entry * qty
+        exit_notional = exit_price * qty
+        total_fees = (entry_notional + exit_notional) * fee_rate
         
-        # Update portfolio value
+        # 2. PnL Calculation
+        pnl_gross = (exit_price - entry) * qty if side == 'LONG' else (entry - exit_price) * qty
+        pnl_net = pnl_gross - total_fees
+        is_win = pnl_net > 0
+        
+        # Update portfolio value (using NET PnL)
         portfolio = await self.state.get_float('portfolio:value') or float(CAPITAL)
-        portfolio += pnl_usd
+        portfolio += pnl_net
         await self.state.set('portfolio:value', portfolio)
         
         # Strategy-Specific Stats
@@ -26,16 +34,17 @@ class PnLTracker:
         await self.state.redis.incr(f"{s_base}:trades")
         if is_win:
             await self.state.redis.incr(f"{s_base}:wins")
-        await self.state.redis.incrbyfloat(f"{s_base}:pnl", pnl_usd)
+        await self.state.redis.incrbyfloat(f"{s_base}:pnl", pnl_net)
+        await self.state.redis.incrbyfloat(f"{s_base}:fees", total_fees)
         
-        # Equity History (for area chart)
+        # Equity History
         equity_entry = {
             'time': datetime.utcnow().strftime('%H:%M:%S'),
             'value': portfolio,
             'strategy': strategy
         }
         await self.state.redis.lpush('equity:history', json.dumps(equity_entry))
-        await self.state.redis.ltrim('equity:history', 0, 100) # last 100 points
+        await self.state.redis.ltrim('equity:history', 0, 100)
         
         # Record in trade history
         trade = {
@@ -45,7 +54,9 @@ class PnLTracker:
             'entry': entry,
             'exit': exit_price,
             'qty': qty,
-            'pnl': pnl_usd,
+            'pnl_gross': pnl_gross,
+            'pnl_net': pnl_net,
+            'fees': total_fees,
             'reason': reason,
             'time': datetime.utcnow().isoformat()
         }

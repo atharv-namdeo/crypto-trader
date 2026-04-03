@@ -161,40 +161,36 @@ class FeatureEngine:
         except Exception:
             pass
 
-        # ── VOLUME & ORDERBOOK ────────────────────────────────────────────
+        # ── VOLUME & ORDERBOOK (EXPANDED) ─────────────────────────────────
         try:
+            # BTC Price for Macro Feature
+            btc_price = await self.state.get_float("price:BTC/USDT") or close_1m.iloc[-1]
+            f['btc_relative_strength'] = float(close_1m.iloc[-1] / (btc_price + 1e-9))
+            
             vol_sma20 = vol_1m.rolling(20).mean().iloc[-1]
             f['volume_ratio'] = float(vol_1m.iloc[-1] / (vol_sma20 + 1e-9))
-            vol_std = vol_1m.rolling(20).std().iloc[-1]
-            f['volume_zscore'] = float((vol_1m.iloc[-1] - vol_sma20) / (vol_std + 1e-9))
 
-            # CVD from live tape
+            # CVD & Aggressive Trade Ratio from live tape
             f['cvd_1m'] = 0.0
-            f['trade_imbalance'] = 0.0
+            f['aggressive_buy_ratio'] = 0.5
             if isinstance(tape, list) and tape:
                 buys = sum(t.get('qty', 0) for t in tape if t.get('side') == 'buy')
                 sells = sum(t.get('qty', 0) for t in tape if t.get('side') == 'sell')
                 f['cvd_1m'] = float(buys - sells)
-                f['trade_imbalance'] = float((buys - sells) / (buys + sells + 1e-9))
+                f['aggressive_buy_ratio'] = float(buys / (buys + sells + 1e-9))
 
-            # Live order book
-            f['ob_imbalance'] = 0.0
-            f['spread_normalized'] = 0.001
-            f['microprice_vs_mid'] = 0.0
-            if ob and 'bids' in ob and 'asks' in ob and ob['asks'] and ob['bids']:
-                bids = ob['bids'][:10]
-                asks = ob['asks'][:10]
-                bid_v = sum(q for p, q in bids)
-                ask_v = sum(q for p, q in asks)
-                f['ob_imbalance'] = float((bid_v - ask_v) / (bid_v + ask_v + 1e-9))
-                spread = asks[0][0] - bids[0][0]
-                f['spread_normalized'] = float(spread / (close_1m.iloc[-1] + 1e-9))
+            # Deep Order Book (Top 20 Levels)
+            f['ob_imbalance_deep'] = 0.0
+            if ob and 'bids' in ob and 'asks' in ob:
+                # Weighted imbalance: closer levels have more weight
+                bid_v = sum(q * (1.0 / (i + 1)) for i, (p, q) in enumerate(ob['bids'][:20]))
+                ask_v = sum(q * (1.0 / (i + 1)) for i, (p, q) in enumerate(ob['asks'][:20]))
+                f['ob_imbalance_deep'] = float((bid_v - ask_v) / (bid_v + ask_v + 1e-9))
                 
-                mid = (asks[0][0] + bids[0][0]) / 2.0
-                micro = (bid_v * asks[0][0] + ask_v * bids[0][0]) / (bid_v + ask_v + 1e-9)
-                f['microprice_vs_mid'] = float(micro - mid)
-        except Exception:
-            pass
+                spread = ob['asks'][0][0] - ob['bids'][0][0]
+                f['spread_normalized'] = float(spread / (close_1m.iloc[-1] + 1e-9))
+        except Exception as e:
+            log.debug(f"Feature expansion error for {symbol}: {e}")
 
         # ── VWAP ──────────────────────────────────────────────────────────
         try:

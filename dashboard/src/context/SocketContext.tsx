@@ -1,7 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import toast from 'react-hot-toast';
-import { rtdb } from '../firebase';
-import { ref, onValue } from 'firebase/database';
 
 export interface EngineData {
   market: Record<string, { price: number; change: number; high?: number; low?: number }>;
@@ -163,148 +161,12 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  // --- FIREBASE REALTIME LISTENERS (Cloud Source of Truth) ---
+  // --- LOCAL MODE: Rely 100% on WebSocket (Firebase Disabled) ---
   useEffect(() => {
-    // Sync VITE_WS_URL status to connected for Firebase-only mode
     if (!connected && !socket) {
-       console.log("☁️ Running in Cloud-Native (Firebase Only) mode");
-       setConnected(true);
+       console.log("📍 Waiting for local engine connection...");
     }
-    
-    console.log("🔥 Initializing Firebase Realtime Listeners...");
-    
-    // 1. Market Prices
-    const marketRef = ref(rtdb, 'market/prices');
-    const unsubscribeMarket = onValue(marketRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(prev => ({
-          ...prev,
-          market: {
-            ...prev.market,
-            ...Object.fromEntries(
-              Object.entries(val).map(([sym, data]: [string, any]) => [
-                sym, 
-                { 
-                  price: data.current_price, 
-                  change: 0, 
-                  confidence: data.confidence || 0 
-                }
-              ])
-            )
-          }
-        }));
-      }
-    });
-
-    // 2. Aggregated Positions
-    const posActiveRef = ref(rtdb, 'trading/positions_active');
-    const unsubscribePosActive = onValue(posActiveRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(prev => ({
-          ...prev,
-          positions: Array.isArray(val) ? val : Object.values(val)
-        }));
-      }
-    });
-
-    // 3. Signals
-    const signalRef = ref(rtdb, 'trading/signals');
-    const unsubscribeSignals = onValue(signalRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(prev => ({
-          ...prev,
-          signals: Object.values(val)
-        }));
-      }
-    });
-
-    // 4. Status & Engine Meta
-    const statusRef = ref(rtdb, 'status');
-    const unsubscribeStatus = onValue(statusRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(prev => ({ 
-          ...prev, 
-          status: val.label || 'Operational',
-          exchange: val.exchange || 'Binance Testnet'
-        }));
-      }
-    });
-
-    // 5. Portfolio Analytics
-    const analyticsRef = ref(rtdb, 'analytics/performance/summary');
-    const unsubscribeAnalytics = onValue(analyticsRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(prev => ({
-          ...prev,
-          portfolio: {
-            ...prev.portfolio,
-            ...val
-          }
-        }));
-      }
-    });
-
-    // 6. Strategy Stats
-    const stratRef = ref(rtdb, 'trading/strategies');
-    const unsubscribeStrats = onValue(stratRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(prev => ({
-          ...prev,
-          strategies: {
-            ...prev.strategies,
-            ...val
-          }
-        }));
-      }
-    });
-
-    // 7. Active Orders
-    const ordersRef = ref(rtdb, 'trading/orders_active');
-    const unsubscribeOrders = onValue(ordersRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(prev => ({
-          ...prev,
-          orders: Array.isArray(val) ? val : Object.values(val)
-        }));
-      }
-    });
-
-    // 8. Fuzzy Scores
-    const fuzzyRef = ref(rtdb, 'market/fuzzy');
-    const unsubscribeFuzzy = onValue(fuzzyRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(prev => {
-          const newMarket = { ...prev.market };
-          Object.entries(val).forEach(([sym, scores]: [string, any]) => {
-            if (newMarket[sym]) {
-              // @ts-ignore - fuzzy property expected by specific components
-              newMarket[sym] = { ...newMarket[sym], fuzzy: scores };
-            }
-          });
-          return { ...prev, market: newMarket };
-        });
-      }
-    });
-
-    return () => {
-      unsubscribeMarket();
-      unsubscribePosActive();
-      unsubscribeSignals();
-      unsubscribeStatus();
-      unsubscribeAnalytics();
-      unsubscribeStrats();
-      unsubscribeOrders();
-      unsubscribeFuzzy();
-    };
-  }, []);
+  }, [connected, socket]);
 
   return (
     <SocketContext.Provider value={{ data, connected, socket }}>

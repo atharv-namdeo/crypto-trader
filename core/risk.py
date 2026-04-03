@@ -7,6 +7,9 @@ Portfolio heat tracking uses PositionTracker data.
 
 import asyncio
 import logging
+import json
+import time
+from core.kelly_calculator import KellyCalculator
 
 log = logging.getLogger("RiskGuardian")
 
@@ -32,6 +35,7 @@ class RiskManager:
     def __init__(self, state=None):
         self.state = state
         self.running = False
+        self.kelly = KellyCalculator(state) if state else None
 
     async def run_loop(self, interval: int = 1):
         """
@@ -70,33 +74,37 @@ class RiskManager:
         except Exception:
             return True # Fail-safe: allow if state is messy
 
-    def compute_position_size(
+    async def compute_position_size(
         self,
         capital: float,
-        conviction: float,      # 0–1 from ensemble scorer
+        strategy: str,
         atr: float,
         price: float,
         stop_atr_multiple: float = 1.5,
     ) -> dict:
         """
-        Kelly-inspired dynamic sizing.
-        Returns {'qty': float, 'notional': float, 'risk_pct': float}.
+        Kelly-optimized dynamic sizing with Drawdown Multiplier.
         """
-        # Scale risk between BASE and MAX based on conviction
-        risk_pct = self.BASE_RISK_PCT + conviction * (self.MAX_RISK_PCT - self.BASE_RISK_PCT)
+        # 1. Get Kelly Base Risk
+        risk_pct = await self.kelly.get_optimal_risk(strategy) if self.kelly else self.BASE_RISK_PCT
+        
+        # 2. Apply Graduated Drawdown Multiplier
+        dd_mult = await self.kelly.get_drawdown_multiplier() if self.kelly else 1.0
+        final_risk_pct = risk_pct * dd_mult
 
         stop_distance = stop_atr_multiple * atr
         if stop_distance <= 0 or price <= 0:
             return {'qty': 0.0, 'notional': 0.0, 'risk_pct': 0.0}
 
-        # notional such that stop loss = risk_pct of capital
-        notional = (capital * risk_pct) / (stop_distance / price)
+        # notional such that stop loss = final_risk_pct of capital
+        notional = (capital * final_risk_pct) / (stop_distance / price)
         qty = notional / price
 
         return {
             'qty':      qty,
             'notional': notional,
-            'risk_pct': risk_pct,
+            'risk_pct': final_risk_pct,
+            'dd_mult':  dd_mult
         }
 
     def validate_trade(
@@ -134,6 +142,34 @@ class RiskManager:
             return False
 
         return True
+
+    async def check_cooldown(self, strategy: str) -> bool:
+        """
+        Enforces a 30-minute pause after 3 consecutive losses.
+        Returns True if system is cooling down.
+        """
+        try:
+            history_raw = await self.state.redis.lrange('trade:history', 0, 9)
+            if not history_raw: return False
+            
+            trades = [json.loads(t) for t in history_raw if json.loads(t).get('strategy', '').lower() == strategy.lower()]
+            if len(trades) < 3: return False
+            
+            # Check last 3
+            recent_pnls = [t.get('pnl_net', 0) for t in trades[:3]]
+            if all(p < 0 for p in recent_pnls):
+                # 3 losses in a row -> Check time
+                last_exit_time = trades[0].get('time')
+                if last_exit_time:
+                    exit_dt = datetime.fromisoformat(last_exit_time)
+                    elapsed = (datetime.utcnow() - exit_dt).total_seconds()
+                    if elapsed < 1800: # 30 mins
+                        log.warning(f"❄️ Strategy {strategy} is in COOLDOWN ({1800-elapsed:.0f}s left)")
+                        return True
+            return False
+        except Exception as e:
+            log.error(f"Cooldown check error: {e}")
+            return False
 
     async def validate_trade_signal(self, symbol: str, signal: str, 
                                     ml_confidence: float, 

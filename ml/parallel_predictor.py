@@ -74,7 +74,13 @@ class ParallelMLPredictor:
         elapsed = time.time() - start_time
         
         log.info(f"⚡ Parallel prediction for {symbol} took {elapsed:.3f}s")
-        prediction = self._ensemble_vote(results)
+        
+        # Phase 6: Fetch Dynamic Weights from Redis
+        dynamic_weights = await self.state.get("ml:weights") or {
+            'LightGBM': 10, 'RF': 8, 'GB': 7, 'XGBoost': 6, 'LSTM': 3
+        }
+        
+        prediction = self._ensemble_vote(results, dynamic_weights)
         
         # Save to cache
         if timestamp:
@@ -97,21 +103,17 @@ class ParallelMLPredictor:
             log.error(f"Error running {name}: {e}")
             raise e
 
-    def _ensemble_vote(self, predictions: list) -> dict:
-        """Weighted voting and direction consensus."""
+    def _ensemble_vote(self, predictions: list, weights: dict) -> dict:
+        """Weighted voting and direction consensus with dynamic ML weights."""
         valid_preds = [p for p in predictions if isinstance(p, dict)]
         if not valid_preds:
             return {'signal': 'HOLD', 'confidence': 0}
             
-        weights = {
-            'LightGBM': 10, 'RF': 8, 'GB': 7, 'XGBoost': 6, 'LSTM': 3
-        }
-        
         total_weight = 0
         weighted_sum = 0
         
         for p in valid_preds:
-            w = weights.get(p['model'], 5)
+            w = weights.get(p['model'], weights.get(p['model'].upper(), 5))
             weighted_sum += p['prediction'] * w
             total_weight += w
             
@@ -138,3 +140,18 @@ class ParallelMLPredictor:
             'models_used': [p['model'] for p in valid_preds],
             'timestamp': time.time()
         }
+
+    async def update_model_weights(self, accuracy_map: dict):
+        """
+        Public hook to update ensemble weights based on external accuracy tracking.
+        accuracy_map: {'LightGBM': 0.65, 'RF': 0.58, ...}
+        """
+        # Convert accuracy (0.0 - 1.0) to weight (1 - 20)
+        new_weights = {}
+        for name, acc in accuracy_map.items():
+            # Linear scaling: 50% acc -> 10 weight, 70% acc -> 20 weight
+            weight = max(1, int((acc - 0.4) * 50)) 
+            new_weights[name] = weight
+            
+        await self.state.set("ml:weights", new_weights)
+        log.info(f"📈 Updated ML Ensemble Weights: {new_weights}")

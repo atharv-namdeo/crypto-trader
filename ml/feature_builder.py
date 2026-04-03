@@ -32,7 +32,10 @@ FEATURE_KEYS = [
     'ob_imbalance', 'spread_normalized', 'microprice_vs_mid',
     
     # VWAP
-    'vwap_zscore'
+    'vwap_zscore',
+
+    # Phase 6: Expert Features (Appended to maintain backward compatibility)
+    'ob_imbalance_deep', 'btc_relative_strength', 'aggressive_buy_ratio'
 ]
 
 def build_feature_vector(feature_dict: dict) -> np.ndarray:

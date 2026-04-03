@@ -1,15 +1,12 @@
-import firebase_admin
-from firebase_admin import credentials, db
 import logging
-import os
-import json
+from core.local_storage_manager import LocalStorageManager
 
 log = logging.getLogger("FirebaseManager")
 
 class FirebaseManager:
     """
-    Handles synchronization between the Trading Engine and Firebase Realtime Database.
-    Serves as the Single Source of Truth for the Hedge Fund platform.
+    Wrapper for LocalStorageManager that mimics the Firebase interface.
+    Ensures absolute local execution while maintaining existing code structure.
     """
     _instance = None
     _initialized = False
@@ -23,69 +20,26 @@ class FirebaseManager:
         if self._initialized:
             return
             
-        self.db_url = database_url or os.getenv("FIREBASE_URL")
-        cred_json = os.getenv("FIREBASE_CREDENTIALS")
-        
-        try:
-            if cred_json:
-                # cred_json can be a path or a JSON string
-                if cred_json.endswith('.json'):
-                    cred = credentials.Certificate(cred_json)
-                else:
-                    cred = credentials.Certificate(json.loads(cred_json))
-                
-                firebase_admin.initialize_app(cred, {
-                    'databaseURL': self.db_url
-                })
-                self._initialized = True
-                log.info("✅ Firebase Admin initialized successfully")
-            else:
-                log.warning("⚠️ FIREBASE_CREDENTIALS missing. Firebase sync will be disabled.")
-        except Exception as e:
-            log.error(f"❌ Firebase Initialization Error: {e}")
+        self.local_storage = LocalStorageManager()
+        self._initialized = True
+        log.info("✅ FirebaseManager (Local Wrapper) initialized successfully")
 
     def set(self, path: str, data: any):
-        """Write data to a specific Firebase node."""
-        if not self._initialized: return
-        try:
-            ref = db.reference(path)
-            ref.set(data)
-        except Exception as e:
-            log.error(f"❌ Firebase Write Error [{path}]: {e}")
+        """Write data to a specific node."""
+        self.local_storage.set(path, data)
 
     def update(self, path: str, data: dict):
-        """Update specific fields in a Firebase node."""
-        if not self._initialized: return
-        try:
-            ref = db.reference(path)
-            ref.update(data)
-        except Exception as e:
-            log.error(f"❌ Firebase Update Error [{path}]: {e}")
+        """Update specific fields in a node."""
+        self.local_storage.update(path, data)
 
     def get(self, path: str):
-        """Read data from a Firebase node."""
-        if not self._initialized: return None
-        try:
-            ref = db.reference(path)
-            return ref.get()
-        except Exception as e:
-            log.error(f"❌ Firebase Read Error [{path}]: {e}")
-            return None
+        """Read data from a node."""
+        return self.local_storage.get(path)
 
     def delete(self, path: str):
-        """Remove a node from Firebase."""
-        if not self._initialized: return
-        try:
-            ref = db.reference(path)
-            ref.delete()
-        except Exception as e:
-            log.error(f"❌ Firebase Delete Error [{path}]: {e}")
+        """Remove a node."""
+        self.local_storage.delete(path)
 
     def push(self, path: str, data: any):
-        """Push data to a list node (creates unique ID)."""
-        if not self._initialized: return
-        try:
-            ref = db.reference(path)
-            ref.push(data)
-        except Exception as e:
-            log.error(f"❌ Firebase Push Error [{path}]: {e}")
+        """Push data to a list node."""
+        return self.local_storage.push(path, data)

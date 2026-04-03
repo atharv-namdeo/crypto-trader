@@ -15,7 +15,8 @@ from config import SYMBOLS
 
 log = logging.getLogger("OrderEngine")
 
-class OrderEngine    def __init__(self, state: StateManager, portfolio_risk=None):
+class OrderEngine:
+    def __init__(self, state: StateManager, portfolio_risk=None):
         from config import settings
         self.state = state
         self.portfolio_risk = portfolio_risk
@@ -61,7 +62,6 @@ class OrderEngine    def __init__(self, state: StateManager, portfolio_risk=None
             log.error(f"❌ Order Engine API connection FAILED: {e}")
             log.warning("Continuing in DEGRADED MODE (Order execution disabled)")
             self.client = None
-s
 
     async def close_client(self):
         if self.client:
@@ -79,11 +79,11 @@ s
                     await self.init_client()
                 
                 if loops % 60 == 0:
-                        try:
-                            acc = await self.client.futures_account()
-                            await self.state.set('binance:account', acc)
-                        except Exception as e:
-                            log.warning(f"Could not fetch Binance account: {e}")
+                    try:
+                        acc = await self.client.futures_account()
+                        await self.state.set('binance:account', acc)
+                    except Exception as e:
+                        log.warning(f"Could not fetch Binance account: {e}")
                             
                 for symbol in SYMBOLS:
                     queue_key = f"order_request:{symbol}"
@@ -238,33 +238,52 @@ s
 
     async def _execute_open(self, symbol: str, side: str, qty: float, price: float, stop: float, tp: float, strategy: str = 'UNKNOWN'):
         main_side = 'BUY' if side == 'LONG' else 'SELL'
-        qty_str = f"{qty}" # Already rounded
+        qty_str = f"{qty}"
         
-        log.info(f"🚀 [REAL ORDER] OPEN {side} {symbol} qty={qty_str} @ {price}")
+        # --- SMART ORDER ROUTING (Maker Priority) ---
+        log.info(f"⚡ [SOR] Attempting LIMIT order for {symbol} to save fees...")
         
-        # Log signal for chart
+        # Use a slightly aggressive limit price (better than mid)
         try:
-            from datetime import datetime
-            signal = {
-                'time': datetime.utcnow().timestamp(),
-                'price': price,
-                'type': side,
-                'action': 'OPEN',
-                'strategy': 'UNKNOWN', # In _execute_open we don't have req, but we can pass it
-                'pnl': 0
-            }
-            # We'll need a better way to pass strategy name here. 
-            # I'll modify the signature or use a global.
-            # For now I'll modify _process_order to log signals instead.
-        except: pass
-        
-        main_order = await self.client.futures_create_order(
-            symbol=symbol,
-            side=main_side,
-            type='MARKET',
-            quantity=qty_str
-        )
-        log.info(f"[TESTNET FILLED] order_id={main_order['orderId']}")
+            limit_price = price # We assume price is the best price from book
+            limit_order = await self.client.futures_create_order(
+                symbol=symbol,
+                side=main_side,
+                type='LIMIT',
+                timeInForce='GTX', # Post Only
+                quantity=qty_str,
+                price=str(limit_price)
+            )
+            
+            # Wait for fill or timeout
+            for _ in range(5): # 5 seconds
+                await asyncio.sleep(1)
+                status = await self.client.futures_get_order(symbol=symbol, orderId=limit_order['orderId'])
+                if status['status'] == 'FILLED':
+                    log.info(f"✅ [SOR] Limit order FILLED (MAKER) for {symbol}")
+                    break
+            else:
+                # Not filled -> Cancel and Market
+                log.warning(f"⏳ [SOR] Limit order timeout for {symbol}. Falling back to MARKET.")
+                await self.client.futures_cancel_order(symbol=symbol, orderId=limit_order['orderId'])
+                main_order = await self.client.futures_create_order(
+                    symbol=symbol,
+                    side=main_side,
+                    type='MARKET',
+                    quantity=qty_str
+                )
+                log.info(f"🚀 [SOR] Market order FILLED (TAKER) for {symbol}")
+        except BinanceAPIException as e:
+            if e.code == -2011: # Cancel rejected (already filled?)
+                 log.info(f"✅ [SOR] Order already filled or closed.")
+            else:
+                # Fallback to pure market if limit setup fails
+                main_order = await self.client.futures_create_order(
+                    symbol=symbol,
+                    side=main_side,
+                    type='MARKET',
+                    quantity=qty_str
+                )
 
         # --- FIREBASE SYNC: Order Record ---
         self.state.firebase.set(f"trading/orders/{main_order['orderId']}", {

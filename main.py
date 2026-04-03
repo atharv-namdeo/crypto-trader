@@ -37,6 +37,7 @@ from execution.pre_launch_validator import PreLaunchValidator
 from execution.graduated_rollout import GraduatedRollout
 from execution.alert_system import AlertSystem, monitor_critical_metrics
 from core.multi_strategy_manager import MultiStrategyManager
+from core.regime_detector import RegimeDetector
 from core.dashboard_sync import DashboardSynchronizer
 
 from core.telegram_notifier import TelegramNotifier
@@ -253,6 +254,7 @@ async def main():
     perf_monitor = PerformanceMonitor()
     signal_tracker = SignalQualityTracker(state)
     dash_sync = DashboardSynchronizer(state)
+    regime_detector = RegimeDetector(state)
     
     # --- PHASE 7: EXECUTION TOOLS ---
     auto_tuner = StrategyAutoTuner(state)
@@ -320,6 +322,7 @@ async def main():
         asyncio.create_task(ws_feed.run_forever(), name="WS_FEED"),
         asyncio.create_task(data_manager.run_loop(interval_seconds=60), name="DATA_MGR"),
         asyncio.create_task(features.run_forever(interval_s=1), name="FEAT_ENG"),
+        asyncio.create_task(regime_detector.run_loop(), name="REGIME_DET"),
         
         # Enterprise Engine Task
         asyncio.create_task(enterprise_engine.start(), name="ENTERPRISE_ENG"),
