@@ -37,20 +37,55 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
 
-    # --- MULTI-STRATEGY ALLOCATION ---
+    # --- AUTONOMOUS MODE ---
+    AUTONOMOUS_MODE: bool = True          # Fully automated — no user selection needed
+    ENABLE_DYNAMIC_REBALANCING: bool = True
+    REBALANCE_INTERVAL_SECONDS: int = 3600  # Rebalance every hour
+    SHARPE_THRESHOLD: float = 0.5          # Only allocate to strategies with Sharpe > 0.5
+    ABANDON_SHARPE: float = -0.5           # Abandon strategies below this Sharpe
+
+    # --- SIGNAL QUALITY FILTERS ---
+    MIN_SIGNAL_CONFIRMATIONS: int = 2        # Require 2+ confirmations before entry
+    MIN_LIQUIDITY_USD: float = 1_000_000.0   # Skip coins with < $1M daily volume
+    MAX_HOURLY_VOLATILITY: float = 0.10      # Skip coins with > 10% hourly moves
+    REQUIRE_EMA_TREND_ALIGNMENT: bool = True  # price > EMA20 > EMA50 for longs
+
+    # --- REGIME-AWARE ATR MULTIPLIERS (SL / TP) ---
+    REGIME_ATR_MULTIPLIERS: Dict[str, Dict[str, float]] = {
+        'TRENDING_BULL':        {'sl': 3.5, 'tp': 7.0},
+        'TRENDING_BEAR':        {'sl': 3.5, 'tp': 7.0},
+        'TRENDING_NEUTRAL':     {'sl': 3.0, 'tp': 6.5},
+        'HIGH_VOL_CHOP':        {'sl': 2.0, 'tp': 5.0},
+        'LOW_VOL_ACCUMULATION': {'sl': 4.0, 'tp': 6.0},
+        'NEUTRAL':              {'sl': 3.0, 'tp': 6.0},
+    }
+
+    # --- KELLY CRITERION POSITION SIZING ---
+    KELLY_FRACTION: float = 0.25    # Quarter-Kelly for safety
+    MIN_RISK_PCT: float = 0.01      # Minimum 1% per trade
+    MAX_RISK_PCT: float = 0.05      # Maximum 5% per trade
+
+    # --- CONSECUTIVE LOSS PROTECTION ---
+    MAX_CONSECUTIVE_LOSSES: int = 5  # Throttle after this many losses in a row
+
+    # --- MULTI-STRATEGY ALLOCATION (initial; rebalanced automatically) ---
     STRATEGY_ALLOCATIONS: Dict[str, float] = {
-        'scalper': 0.15,      # 15%
-        'swing': 0.35,        # 35%
-        'position': 0.40,     # 40%
-        'ai_ensemble': 0.10   # 10%
+        'scalper': 0.05,          # ↓ Reduced (high false-signal rate)
+        'swing': 0.35,            # ↑ Reliable trend-following
+        'position': 0.40,         # Best risk:reward
+        'ai_ensemble': 0.10,      # Multi-timeframe ensemble
+        'mean_reversion': 0.05,   # Range/chop environments
+        'ensemble_voting': 0.05,  # Voting-based confirmation
     }
     
     # Per-strategy position limits
     MAX_POSITIONS_PER_STRATEGY: Dict[str, int] = {
-        'scalper': 5,
-        'swing': 3,
-        'position': 2,
-        'ai_ensemble': 2
+        'scalper': 3,
+        'swing': 4,
+        'position': 3,
+        'ai_ensemble': 3,
+        'mean_reversion': 3,
+        'ensemble_voting': 2,
     }
 
     # --- TRADING CONFIG ---
