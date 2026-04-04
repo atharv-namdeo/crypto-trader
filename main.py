@@ -26,6 +26,7 @@ from core.pnl_tracker import PnLTracker
 
 from core.strategies.ensemble_algorithm import EnsembleAlgorithm
 from core.enterprise_engine import EnterpriseTradingEngine
+from autonomous_optimizer import AutonomousOptimizer
 from ml.anomaly_detector import AnomalyDetector
 from ml.boruta_selector import BorutaSelector
 from ml.rf_gb_predictor import RFGBPredictor
@@ -261,7 +262,10 @@ async def main():
     
     # --- PHASE 22: ENTERPRISE TRADING ENGINE ---
     enterprise_engine = EnterpriseTradingEngine(state, order_engine)
-    
+
+    # --- AUTONOMOUS OPTIMIZER (full automation — no manual input needed) ---
+    autonomous_optimizer = AutonomousOptimizer(state, order_engine)
+
     # --- PHASE 22: MULTI-STRATEGY MANAGER ---
     # Use the Graduated Rollout pos size as our baseline total capital
     rollout = GraduatedRollout(state)
@@ -326,6 +330,8 @@ async def main():
         
         # Enterprise Engine Task
         asyncio.create_task(enterprise_engine.start(), name="ENTERPRISE_ENG"),
+        # Autonomous Optimizer — fully automated strategy selection & execution
+        asyncio.create_task(autonomous_optimizer.run_loop(), name="AUTONOMOUS_OPT"),
         asyncio.create_task(ml_engine_loop(state, ml_predictor, perf_monitor, signal_tracker), name="ML_ENGINE"),
         asyncio.create_task(perf_monitor.log_stats_periodically(300), name="PERF_STATS"),
         
@@ -345,7 +351,7 @@ async def main():
 
     # Graceful shutdown handler
     loop = asyncio.get_event_loop()
-    components = [ws_feed, data_manager, features, risk_guardian, order_engine, dash_sync, enterprise_engine]
+    components = [ws_feed, data_manager, features, risk_guardian, order_engine, dash_sync, enterprise_engine, autonomous_optimizer]
     for sig in (signal.SIGINT, signal.SIGTERM):
         with suppress(NotImplementedError):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(tasks, *components)))
