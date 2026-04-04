@@ -126,8 +126,12 @@ class AutonomousOptimizer:
             for strategy in strategies:
                 sharpe = await self.state.get_float(f"metrics:{strategy}:sharpe") or 0.0
                 win_rate = await self.state.get_float(f"metrics:{strategy}:win_rate") or 0.5
-                # Combined score: 70% Sharpe + 30% win-rate
-                score = max(0.05, sharpe * 0.7 + win_rate * 0.3)
+                # Exclude strategies below the abandon threshold
+                if sharpe < -0.5:
+                    scores[strategy] = 0.0
+                    continue
+                # Combined score: 70% Sharpe + 30% win-rate (min 0 so normalisation is stable)
+                score = max(0.0, sharpe * 0.7 + win_rate * 0.3)
                 scores[strategy] = score
 
             total = sum(scores.values()) + 1e-9

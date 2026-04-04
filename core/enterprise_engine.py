@@ -97,11 +97,8 @@ async def _get_kelly_qty(
             return (capital * 0.02) / (price + 1e-9)
 
         history_raw = await state.redis.lrange("trade:history", 0, 99)
-        trades = [
-            json.loads(t)
-            for t in (history_raw or [])
-            if json.loads(t).get("strategy", "").lower() == strategy.lower()
-        ]
+        all_trades = [json.loads(t) for t in (history_raw or [])]
+        trades = [t for t in all_trades if t.get("strategy", "").lower() == strategy.lower()]
 
         if len(trades) < 10:
             return (capital * 0.015) / (price + 1e-9)

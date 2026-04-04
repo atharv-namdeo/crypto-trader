@@ -33,6 +33,7 @@ class ExpertBacktestEngine:
         self.initial_capital = initial_capital
         self.positions = {}
         self.trades = []
+        self.consecutive_losses = 0  # tracks consecutive losses across all symbols
         self.slippage_model = SlippageModel()
         self.live_mode = live_mode
         self.exchange = ccxt.binance() if ccxt else None
@@ -146,7 +147,6 @@ class ExpertBacktestEngine:
         if not self.live_mode: sim_df = sim_df.tail(2000)
 
         tier = self.slippage_model.get_tier(symbol)
-        consecutive_losses = 0  # per-symbol loss counter
 
         for _, m_row in sim_df.iterrows():
             curr_ts = m_row['ts']
@@ -173,12 +173,12 @@ class ExpertBacktestEngine:
                     pnl_g = (real_ex - pos['entry_raw']) * pos['qty'] if pos['side'] == 'LONG' else (pos['entry_raw'] - real_ex) * pos['qty']
                     pnl_n = pnl_g - (pos['entry_fee'] + (real_ex * pos['qty'] * FEE_RATE))
                     self.capital += pnl_n
-                    consecutive_losses = consecutive_losses + 1 if pnl_n < 0 else 0
+                    self.consecutive_losses = self.consecutive_losses + 1 if pnl_n < 0 else 0
                     self.trades.append({'symbol': symbol, 'side': pos['side'], 'pnl_net': pnl_n, 'reason': reason, 'time': curr_ts, 'regime': regime})
                     del self.positions[symbol]; continue
 
             # Skip entry after 5+ consecutive losses (throttle)
-            if consecutive_losses >= 5:
+            if self.consecutive_losses >= 5:
                 continue
 
             score = self.compute_strategy_score(h_row, btc_row)
@@ -204,7 +204,11 @@ class ExpertBacktestEngine:
                 slip = self.slippage_model.estimate_slippage(symbol, tier, qty, price)
                 real_en = price * (1 + slip) if side == 'LONG' else price * (1 - slip)  # noqa: F841
                 self.positions[symbol] = {'side': side, 'entry_raw': price, 'entry_fee': (qty*price*FEE_RATE), 'qty': qty, 'sl': sl, 'tp': tp, 'regime': regime}
-                log.info(f"✅ [ENTRY] {symbol} {side} Score:{score:.2f} Reg:{regime} Mult:{mult:.1f} SL_mult:{self._REGIME_ATR.get(regime, self._REGIME_ATR['NEUTRAL'])['sl']}")
+                sl_mult = self._REGIME_ATR.get(regime, self._REGIME_ATR['NEUTRAL'])['sl']
+                log.info(
+                    f"✅ [ENTRY] {symbol} {side} Score:{score:.2f} "
+                    f"Reg:{regime} Mult:{mult:.1f} SL_atr:{sl_mult}"
+                )
 
     def generate_report(self):
         if not self.trades: return "# Backtest Report\nNo trades."

@@ -186,11 +186,8 @@ class AdvancedRiskEngine:
             if not history_raw:
                 return 0.02
 
-            trades = [
-                json.loads(t)
-                for t in history_raw
-                if json.loads(t).get("strategy", "").lower() == strategy.lower()
-            ]
+            all_trades = [json.loads(t) for t in history_raw]
+            trades = [t for t in all_trades if t.get("strategy", "").lower() == strategy.lower()]
 
             if len(trades) < 10:
                 return 0.015  # not enough data

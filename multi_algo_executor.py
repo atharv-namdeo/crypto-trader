@@ -277,12 +277,13 @@ class MultiAlgoExecutor:
                 wins = arr[arr > 0]
                 losses = arr[arr <= 0]
                 win_rate = len(wins) / len(arr)
-                profit_factor = (wins.sum() / (abs(losses.sum()) + 1e-9)) if len(losses) > 0 else float("inf")
+                profit_factor = (wins.sum() / (abs(losses.sum()) + 1e-9)) if len(losses) > 0 else 999.0
 
-                # Sharpe (annualised, assume ~1h average trade duration as proxy)
+                # Sharpe (annualised, assume ~1h average trade duration)
+                # Annualization factor for 1h: sqrt(24 * 252) = sqrt(6048)
                 mean_r = arr.mean()
                 std_r = arr.std() + 1e-9
-                sharpe = (mean_r / std_r) * (252 ** 0.5)  # annualise
+                sharpe = (mean_r / std_r) * (6048 ** 0.5)  # 1h annualisation
 
                 await self.state.set(f"metrics:{strategy}:sharpe", round(float(sharpe), 4))
                 await self.state.set(f"metrics:{strategy}:win_rate", round(float(win_rate), 4))

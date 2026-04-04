@@ -134,7 +134,7 @@ class StrategySelector:
                 continue
 
             # Normalize sharpe to [0, 2] range for scoring (clamp between -1 and 3)
-            norm_sharpe = (max(-1.0, min(3.0, sharpe)) + 1.0) / 4.0 * 2.0
+            norm_sharpe = (max(-1.0, min(3.0, sharpe)) + 1.0) / 2.0
 
             combined = fit_score * 0.5 + norm_sharpe * 0.5
             scored.append((strategy, combined))
@@ -174,8 +174,8 @@ class StrategySelector:
         if sharpe < ABANDON_SHARPE:
             return False, f"Sharpe {sharpe:.2f} too low"
 
-        consecutive_losses = await self.state.get_float(f"metrics:{strategy}:consecutive_losses") or 0
+        consecutive_losses = int(await self.state.get_float(f"metrics:{strategy}:consecutive_losses") or 0)
         if consecutive_losses >= 5:
-            return False, f"{int(consecutive_losses)} consecutive losses — throttled"
+            return False, f"{consecutive_losses} consecutive losses — throttled"
 
         return True, "ok"
