@@ -157,6 +157,8 @@ class FeatureEngine:
             f['realized_vol_14h'] = float(returns.tail(14).std() * math.sqrt(24 * 365)) if len(returns) >= 14 else 0.0
 
             f['atr_14_1h'] = float(ta_ind.atr(df_1h['high'], df_1h['low'], close_1h, length=14).iloc[-1])
+            f['atr_5_1h']  = float(ta_ind.atr(df_1h['high'], df_1h['low'], close_1h, length=5).iloc[-1])
+            f['atr_30_1h'] = float(ta_ind.atr(df_1h['high'], df_1h['low'], close_1h, length=30).iloc[-1])
             f['atr_14_1m'] = float(ta_ind.atr(high_1m, low_1m, close_1m, length=14).iloc[-1])
         except Exception:
             pass

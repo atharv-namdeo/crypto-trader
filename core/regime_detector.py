@@ -38,11 +38,19 @@ class RegimeDetector:
 
     async def _detect_regime(self, symbol: str, is_global: bool = False):
         try:
-            # Fetch 1h OHLCV (minimum 100 candles needed for ADX/ATR)
+            from core.strategies.regime_classifier import AdvancedRegimeDetector
+            detector = AdvancedRegimeDetector()
+            
+            # Fetch 1h OHLCV
             df = await self.state.get_ohlcv(symbol, "1h", limit=100)
             if df.empty or len(df) < 50: return
             
-            # Indicators
+            # Advanced Classification
+            phase = detector.classify_market(df)
+            regime = phase.value
+            
+            # Additional metrics for Dashboard
+            from core.utils import compute_adx, compute_atr, compute_rsi
             adx = compute_adx(df, window=14)
             atr = compute_atr(df, window=14)
             rsi = compute_rsi(df['close'], window=14)
@@ -50,22 +58,6 @@ class RegimeDetector:
             curr_adx = adx.iloc[-1]
             curr_atr_pct = (atr.iloc[-1] / df['close'].iloc[-1]) * 100
             curr_rsi = rsi.iloc[-1]
-            
-            # Regime Classification
-            if curr_adx > 25:
-                # Trending
-                if curr_rsi > 55:
-                    regime = "TRENDING_BULL"
-                elif curr_rsi < 45:
-                    regime = "TRENDING_BEAR"
-                else:
-                    regime = "TRENDING_NEUTRAL"
-            else:
-                # Non-Trending
-                if curr_atr_pct > 2.0: # Threshold for high relative volatility
-                    regime = "HIGH_VOL_CHOP"
-                else:
-                    regime = "LOW_VOL_ACCUMULATION"
             
             # Store in Redis
             key = "market:regime:global" if is_global else f"market:regime:{symbol}"
@@ -79,7 +71,7 @@ class RegimeDetector:
             await self.state.set(key, data)
             
             if is_global:
-                log.info(f"🌍 Global Regime: {regime} (ADX: {curr_adx:.1f}, Vol: {curr_atr_pct:.2f}%)")
+                log.info(f"🌍 Global Regime (10-Phase): {regime}")
                 
         except Exception as e:
             log.debug(f"Could not compute regime for {symbol}: {e}")

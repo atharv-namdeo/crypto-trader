@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     BINANCE_API_SECRET: str = ""
 
     # --- BOT SETTINGS ---
-    DRY_RUN: bool = False
+    DRY_RUN: bool = True
     BINANCE_TESTNET: bool = True  # Use demo account (not sandbox)
     CAPITAL: float = 1000.0
     RISK_PER_TRADE: float = 0.02
@@ -37,13 +37,24 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
 
-    # --- MULTI-STRATEGY ALLOCATION ---
+    # --- MULTI-STRATEGY ALLOCATION (Final Profit Optimized) ---
     STRATEGY_ALLOCATIONS: Dict[str, float] = {
-        'scalper': 0.15,      # 15%
-        'swing': 0.35,        # 35%
-        'position': 0.40,     # 40%
+        'scalper': 0.05,      # 5% (Reduced - Lower Win Rate)
+        'swing': 0.40,        # 40% (Increased - Reliable Trends)
+        'position': 0.45,     # 45% (Aggressive - Best Risk/Reward)
         'ai_ensemble': 0.10   # 10%
     }
+    
+    # --- AUTONOMOUS SETTINGS (PHASE 2) ---
+    AUTONOMOUS_MODE: bool = True
+    REBALANCE_FREQUENCY_HOURS: int = 24
+    ASSIGNMENT_FREQUENCY_MINUTES: int = 5
+    QUORUM_THRESHOLD: int = 2  # Signals required for confirmation
+    
+    # Rebalancing logic
+    ENABLE_DYNAMIC_REBALANCING: bool = True
+    REBALANCE_FREQUENCY: str = "24h"
+    SHARPE_THRESHOLD: float = 0.5
     
     # Per-strategy position limits
     MAX_POSITIONS_PER_STRATEGY: Dict[str, int] = {

@@ -9,3 +9,10 @@ dist/
 .firebase/
 .gemini/
 dashboard/node_modules/
+
+# Data and Audit Exclusions
+data/
+backtest_results/*.csv
+backtest_results/*.log
+backtest_results/*.png
+backtest_results/*.webp

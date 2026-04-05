@@ -15,7 +15,8 @@ class KellyCalculator:
         self.state = state
         self.min_trades = 10
         self.fractional_kelly = 0.25 # Quarter-Kelly (Conservative)
-        self.max_risk_pct = 0.03    # Hard cap 3% per trade
+        self.min_risk_pct = 0.01    # Hard floor 1%
+        self.max_risk_pct = 0.05    # Hard cap 5% per trade
 
     async def get_optimal_risk(self, strategy: str = "ai_ensemble") -> float:
         """
@@ -55,8 +56,8 @@ class KellyCalculator:
             kelly_full = win_rate - ((1 - win_rate) / win_loss_ratio)
             
             # 4. Apply Fractional Kelly and Constraints
-            risk_pct = max(0.005, kelly_full * self.fractional_kelly)
-            risk_pct = min(risk_pct, self.max_risk_pct)
+            risk_pct = kelly_full * self.fractional_kelly
+            risk_pct = max(self.min_risk_pct, min(risk_pct, self.max_risk_pct))
             
             log.info(f"📊 Kelly for {strategy}: WR={win_rate:.1%}, R={win_loss_ratio:.2f} -> K%={risk_pct:.2%}")
             return risk_pct

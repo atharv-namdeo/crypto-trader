@@ -1,3 +1,8 @@
+import mimetypes
+mimetypes.init()
+mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('text/css', '.css')
+
 import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, Depends
 from fastapi.staticfiles import StaticFiles
@@ -179,6 +184,7 @@ def create_app(state: StateManager):
                         "strategies": {},
                         "portfolio": {},
                         "status": "ACTIVE",
+                        "regime": "NEUTRAL",
                         "positions": [],
                         "orders": [],
                         "signals": [],
@@ -345,14 +351,32 @@ def create_app(state: StateManager):
         except Exception as e:
             log.error(f"❌ WebSocket error: {e}")
 
-    # --- DASHBOARD SERVING ---
+    # --- DASHBOARD SERVING (Hardened) ---
     import os
-    if os.path.exists("dashboard/dist"):
-        app.mount("/", StaticFiles(directory="dashboard/dist", html=True), name="static")
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    dist_path = os.path.join(base_dir, "dashboard", "dist")
+    
+    if os.path.exists(dist_path):
+        log.info(f"📁 Mounting Dashboard from {dist_path}")
+        
+        # Explicit root handler with cache-busting
+        @app.get("/")
+        async def serve_index():
+            return FileResponse(
+                os.path.join(dist_path, "index.html"),
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+            )
+
+        app.mount("/", StaticFiles(directory=dist_path, html=True), name="static")
 
         # Fallback for SPA Routing (React Router)
         @app.exception_handler(404)
         async def spa_fallback(request, __):
-            return FileResponse("dashboard/dist/index.html")
+            return FileResponse(
+                os.path.join(dist_path, "index.html"),
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+            )
+    else:
+        log.warning(f"⚠️ Dashboard dist folder not found at {dist_path}")
     
     return app

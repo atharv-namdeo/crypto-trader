@@ -39,6 +39,7 @@ from execution.alert_system import AlertSystem, monitor_critical_metrics
 from core.multi_strategy_manager import MultiStrategyManager
 from core.regime_detector import RegimeDetector
 from core.dashboard_sync import DashboardSynchronizer
+from core.safety_circuit_breaker import SafetyCircuitBreaker
 
 from core.telegram_notifier import TelegramNotifier
 telegram = TelegramNotifier()
@@ -260,24 +261,24 @@ async def main():
     auto_tuner = StrategyAutoTuner(state)
     
     # --- PHASE 22: ENTERPRISE TRADING ENGINE ---
+    # Now includes the Autonomous Optimizer & Advanced Risk Engine
     enterprise_engine = EnterpriseTradingEngine(state, order_engine)
     
-    # --- PHASE 22: MULTI-STRATEGY MANAGER ---
-    # Use the Graduated Rollout pos size as our baseline total capital
-    rollout = GraduatedRollout(state)
+    # Capital baseline from rollout
+    rollout = GraduatedRollout(state, start_capital=float(CAPITAL))
     baseline_cap = await rollout.get_position_size()
-    strategy_manager = MultiStrategyManager(state, total_capital=baseline_cap)
     
-    # Override defaults from config if available
-    strategy_manager.allocations = getattr(config, 'STRATEGY_ALLOCATIONS', strategy_manager.allocations)
-    strategy_manager.max_positions = getattr(config, 'MAX_POSITIONS_PER_STRATEGY', strategy_manager.max_positions)
+    # Sync settings to optimizer's internal manager
+    enterprise_engine.optimizer.manager.total_capital = baseline_cap
+    enterprise_engine.optimizer.manager.allocations = getattr(config, 'STRATEGY_ALLOCATIONS', enterprise_engine.optimizer.manager.allocations)
 
     # --- PHASE 9: MONITORING & REPORTING ---
     report_scheduler = ReportScheduler(state)
     report_scheduler.start()
 
-    # Initialize Alert System
+    # Initialize Safety & Alert Systems
     alert_system = AlertSystem(state)
+    safety_breaker = SafetyCircuitBreaker(state, max_drawdown_pct=0.05)
 
     # --- START API IMMEDIATELY FOR HEALTH CHECKS ---
     api_task = asyncio.create_task(start_api_server(state))
@@ -323,6 +324,7 @@ async def main():
         asyncio.create_task(data_manager.run_loop(interval_seconds=60), name="DATA_MGR"),
         asyncio.create_task(features.run_forever(interval_s=1), name="FEAT_ENG"),
         asyncio.create_task(regime_detector.run_loop(), name="REGIME_DET"),
+        asyncio.create_task(safety_breaker.run_loop(), name="SAFETY_BREAKER"),
         
         # Enterprise Engine Task
         asyncio.create_task(enterprise_engine.start(), name="ENTERPRISE_ENG"),

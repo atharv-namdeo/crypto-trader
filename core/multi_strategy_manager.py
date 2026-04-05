@@ -87,29 +87,33 @@ class MultiStrategyManager:
 
     async def get_regime_multiplier(self, strategy: str) -> float:
         """
-        Returns a multiplier [0.3 to 1.5] based on market regime vs strategy fit.
+        Returns a multiplier [0.2 to 1.5] based on the 10-phase market cycle.
         """
         regime_data = await self.state.get("market:regime:global") or {}
         regime = regime_data.get('regime', 'NEUTRAL')
         
-        # Strategy-Regime Fit Map (Expert-Grade Phase 6)
-        # 1.0 = standard allocation
+        # Strategy-Regime Fit Map (Expert-Grade 10-Phase)
         fits = {
-            'scalper':        {
-                'TRENDING_BULL': 1.0, 'TRENDING_BEAR': 1.0, 
-                'HIGH_VOL_CHOP': 1.5, 'LOW_VOL_ACCUMULATION': 0.8
+            'scalper': {
+                'EARLY_BULL_BREAKOUT': 1.2, 'MATURE_BULL_EXTENSION': 1.0, 'BULL_PARABOLIC_EXHAUSTION': 0.5,
+                'EARLY_BEAR_BREAKDOWN': 1.2, 'MATURE_BEAR_DECLINE': 1.0, 'BEAR_VOLATILITY_BOTTOM': 0.8,
+                'CONSOLIDATION_NARROW': 1.5, 'CONSOLIDATION_WIDE': 1.0, 'HIGH_VOL_CHOP': 0.3, 'ACCUMULATION_PHASE': 0.8
             },
-            'swing':          {
-                'TRENDING_BULL': 1.5, 'TRENDING_BEAR': 1.5, 
-                'HIGH_VOL_CHOP': 0.3, 'LOW_VOL_ACCUMULATION': 0.6
+            'swing': {
+                'EARLY_BULL_BREAKOUT': 1.5, 'MATURE_BULL_EXTENSION': 1.2, 'BULL_PARABOLIC_EXHAUSTION': 0.8,
+                'EARLY_BEAR_BREAKDOWN': 1.5, 'MATURE_BEAR_DECLINE': 1.2, 'BEAR_VOLATILITY_BOTTOM': 0.5,
+                'CONSOLIDATION_NARROW': 0.2, 'CONSOLIDATION_WIDE': 0.5, 'HIGH_VOL_CHOP': 0.2, 'ACCUMULATION_PHASE': 0.4
             },
-            'ai_ensemble':    {
-                'TRENDING_BULL': 1.3, 'TRENDING_BEAR': 1.3, 
-                'HIGH_VOL_CHOP': 0.5, 'LOW_VOL_ACCUMULATION': 1.0
+            'ai_ensemble': {
+                'EARLY_BULL_BREAKOUT': 1.5, 'MATURE_BULL_EXTENSION': 1.3, 'BULL_PARABOLIC_EXHAUSTION': 1.0,
+                'EARLY_BEAR_BREAKDOWN': 1.5, 'MATURE_BEAR_DECLINE': 1.3, 'BEAR_VOLATILITY_BOTTOM': 1.0,
+                'CONSOLIDATION_NARROW': 0.8, 'CONSOLIDATION_WIDE': 1.2, 'HIGH_VOL_CHOP': 0.5, 'ACCUMULATION_PHASE': 1.0
             },
             'mean_reversion': {
-                'HIGH_VOL_CHOP': 1.5, 'TRENDING_BULL': 0.5, 
-                'TRENDING_BEAR': 0.5, 'LOW_VOL_ACCUMULATION': 1.2
+                'CONSOLIDATION_WIDE': 1.5, 'CONSOLIDATION_NARROW': 1.0, 'ACCUMULATION_PHASE': 1.2,
+                'HIGH_VOL_CHOP': 1.0, 'EARLY_BULL_BREAKOUT': 0.2, 'MATURE_BULL_EXTENSION': 0.5,
+                'BULL_PARABOLIC_EXHAUSTION': 1.2, 'EARLY_BEAR_BREAKDOWN': 0.2, 'MATURE_BEAR_DECLINE': 0.5,
+                'BEAR_VOLATILITY_BOTTOM': 1.5
             }
         }
         

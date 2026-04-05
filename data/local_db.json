@@ -1,60 +1,193 @@
 {
-    "market": {
-        "prices": {},
-        "fuzzy": {}
+    "status": {
+        "exchange": "Binance Testnet",
+        "label": "Operational"
     },
     "trading": {
-        "positions": {},
         "positions_active": [],
-        "orders_active": [],
-        "signals": {},
         "strategies": {
             "scalper": {
+                "pos_count": 0,
                 "trades": 0,
                 "wins": 0,
-                "pnl": 0.0,
-                "pos_count": 0
+                "pnl": 0.0
             },
             "swing": {
+                "pos_count": 0,
                 "trades": 0,
                 "wins": 0,
-                "pnl": 0.0,
-                "pos_count": 0
+                "pnl": 0.0
             },
             "position": {
+                "pos_count": 0,
                 "trades": 0,
                 "wins": 0,
-                "pnl": 0.0,
-                "pos_count": 0
+                "pnl": 0.0
             },
             "ai_ensemble": {
+                "pos_count": 0,
                 "trades": 0,
                 "wins": 0,
-                "pnl": 0.0,
-                "pos_count": 0
+                "pnl": 0.0
             }
         }
     },
-    "analytics": {
-        "performance": {
-            "summary": {
-                "total_value": 1000.0,
-                "daily_pnl": 0.0,
-                "sharpe": 0.0,
-                "drawdown": 0.0,
-                "win_rate": 0.0
+    "market": {
+        "prices": {
+            "ALGO": {
+                "USDT": {
+                    "current_price": 0.1182,
+                    "confidence": 0,
+                    "timestamp": 314007375
+                }
+            },
+            "ARB": {
+                "USDT": {
+                    "current_price": 0.0899,
+                    "confidence": 0,
+                    "timestamp": 1775376331964
+                }
+            },
+            "NEAR": {
+                "USDT": {
+                    "current_price": 1.24,
+                    "confidence": 0,
+                    "timestamp": 1775376331878
+                }
+            },
+            "LTC": {
+                "USDT": {
+                    "current_price": 52.75,
+                    "confidence": 0,
+                    "timestamp": 1775376331894
+                }
+            },
+            "ADA": {
+                "USDT": {
+                    "current_price": 0.2411,
+                    "confidence": 0,
+                    "timestamp": 1775376331701
+                }
+            },
+            "BTC": {
+                "USDT": {
+                    "current_price": 66800.3,
+                    "confidence": 0,
+                    "timestamp": 314009796
+                }
+            },
+            "BCH": {
+                "USDT": {
+                    "current_price": 425.86,
+                    "confidence": 0,
+                    "timestamp": 1775376331839
+                }
+            },
+            "DOGE": {
+                "USDT": {
+                    "current_price": 0.08998,
+                    "confidence": 0,
+                    "timestamp": 1775376331722
+                }
+            },
+            "POL": {
+                "USDT": {
+                    "current_price": 0.09013,
+                    "confidence": 0,
+                    "timestamp": 314009781
+                }
+            },
+            "SOL": {
+                "USDT": {
+                    "current_price": 78.78,
+                    "confidence": 0,
+                    "timestamp": 1775376331671
+                }
+            },
+            "TON": {
+                "USDT": {
+                    "current_price": 1.2404,
+                    "confidence": 0,
+                    "timestamp": 314006562
+                }
+            },
+            "ETH": {
+                "USDT": {
+                    "current_price": 2029.39,
+                    "confidence": 0,
+                    "timestamp": 1775376331656
+                }
+            },
+            "FIL": {
+                "USDT": {
+                    "current_price": 0.816,
+                    "confidence": 0,
+                    "timestamp": 314005515
+                }
+            },
+            "AVAX": {
+                "USDT": {
+                    "current_price": 8.778,
+                    "confidence": 0,
+                    "timestamp": 1775376331761
+                }
+            },
+            "DOT": {
+                "USDT": {
+                    "current_price": 1.218,
+                    "confidence": 0,
+                    "timestamp": 1775376331816
+                }
+            },
+            "UNI": {
+                "USDT": {
+                    "current_price": 3.075,
+                    "confidence": 0,
+                    "timestamp": 1775376331798
+                }
+            },
+            "XLM": {
+                "USDT": {
+                    "current_price": 0.15797,
+                    "confidence": 0,
+                    "timestamp": 1775376331911
+                }
+            },
+            "OP": {
+                "USDT": {
+                    "current_price": 0.1062,
+                    "confidence": 0,
+                    "timestamp": 1775376331981
+                }
+            },
+            "ATOM": {
+                "USDT": {
+                    "current_price": 1.678,
+                    "confidence": 0,
+                    "timestamp": 1775376331929
+                }
+            },
+            "XRP": {
+                "USDT": {
+                    "current_price": 1.2853,
+                    "confidence": 0,
+                    "timestamp": 314009765
+                }
+            },
+            "HBAR": {
+                "USDT": {
+                    "current_price": 0.08638,
+                    "confidence": 0,
+                    "timestamp": 1775376331949
+                }
+            },
+            "LINK": {
+                "USDT": {
+                    "current_price": 8.503,
+                    "confidence": 0,
+                    "timestamp": 1775376331780
+                }
             }
-        }
-    },
-    "status": {
-        "label": "Operational",
-        "exchange": "Binance Testnet"
-    },
-    "trades": {},
-    "verification": {
-        "test_node": {
-            "status": "success",
-            "timestamp": 123456
         }
     }
 }

@@ -42,11 +42,11 @@ class StateManager:
     async def connect(self):
         """Establish Redis connection with retry logic."""
         import redis.asyncio as redis_lib
-        max_retries = 5
+        max_retries = 2 # Reduced for faster local development
         for attempt in range(max_retries):
             try:
                 self.redis = redis_lib.from_url(self.url, decode_responses=True)
-                await self.redis.ping()
+                await asyncio.wait_for(self.redis.ping(), timeout=2.0)
                 log.info(f"✅ Connected to Redis at {self.url}")
                 return
             except Exception as e:
@@ -55,7 +55,7 @@ class StateManager:
                     log.warning("⚠️ Falling back to In-Memory Mock Redis (State will NOT persist!)")
                     self.redis = MemoryMock()
                     return
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(1)
 
     async def close(self):
         """Close Redis connection."""

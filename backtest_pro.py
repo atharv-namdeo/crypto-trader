@@ -17,26 +17,35 @@ sys.path.append(os.getcwd())
 from config_symbols import SYMBOL_CONFIG
 from core.utils import compute_rsi, compute_atr, compute_ultosc, compute_ema
 from execution.slippage_model import SlippageModel
+from core.advanced_risk_engine import AdvancedRiskEngine
+from core.strategy_selector import StrategySelector
 
 # Constants
 FEE_RATE = 0.0004  # 0.04% Taker Fee
 INITIAL_CAPITAL_USD = 1204.0
-DATA_DIR = "backtest_data"
+DATA_DIR = "backtest_data_oct2025"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 log = logging.getLogger("BacktestExpert")
 
 class ExpertBacktestEngine:
-    def __init__(self, symbols, initial_capital, live_mode=False):
+    def __init__(self, symbols, initial_capital, live_mode=False, data_dir=None):
         self.symbols = symbols
         self.capital = initial_capital
         self.initial_capital = initial_capital
+        self.data_dir = data_dir or DATA_DIR
         self.positions = {}
         self.trades = []
         self.slippage_model = SlippageModel()
         self.live_mode = live_mode
         self.exchange = ccxt.binance() if ccxt else None
         self.btc_h = None
+        
+        # Autonomous Components (Simulated)
+        # Note: We pass None for StateManager in backtest to avoid Redis side-effects
+        self.risk_engine = AdvancedRiskEngine(None) 
+        self.strategy_selector = StrategySelector(None)
+        
         self._load_btc_data()
 
     def _load_btc_data(self):
@@ -50,7 +59,7 @@ class ExpertBacktestEngine:
                 self.live_mode = False # Fallback
         
         if not self.live_mode:
-            f1h = os.path.join(DATA_DIR, "BTC_USDT_1h.csv")
+            f1h = os.path.join(self.data_dir, "BTC_USDT_1h.csv")
             if os.path.exists(f1h):
                 self.btc_h = pd.read_csv(f1h)
         
@@ -59,6 +68,11 @@ class ExpertBacktestEngine:
             self.btc_h['adx'] = compute_adx_df(self.btc_h)
             self.btc_h['atr'] = compute_atr(self.btc_h)
             self.btc_h['rsi'] = compute_rsi(self.btc_h['close'])
+            self.btc_h['ema20'] = compute_ema(self.btc_h['close'], 20)
+            self.btc_h['ema50'] = compute_ema(self.btc_h['close'], 50)
+            sma20 = self.btc_h['close'].rolling(20).mean()
+            std20 = self.btc_h['close'].rolling(20).std()
+            self.btc_h['bbw'] = (4 * std20) / (sma20 + 1e-9)
 
     def load_data(self, symbol):
         if self.live_mode and self.exchange:
@@ -71,32 +85,63 @@ class ExpertBacktestEngine:
                 return df_h, df_m
             except: return None, None
         
-        f1h = os.path.join(DATA_DIR, f"{symbol.replace('/', '_')}_1h.csv")
-        f1m = os.path.join(DATA_DIR, f"{symbol.replace('/', '_')}_1m.csv")
+        f1h = os.path.join(self.data_dir, f"{symbol.replace('/', '_')}_1h.csv")
+        f1m = os.path.join(self.data_dir, f"{symbol.replace('/', '_')}_1m.csv")
         if not os.path.exists(f1h) or not os.path.exists(f1m): return None, None
         return pd.read_csv(f1h), pd.read_csv(f1m)
 
     def detect_regime(self, btc_row):
-        if btc_row is None or btc_row.empty: return "NEUTRAL"
-        adx, rsi = btc_row['adx'], btc_row['rsi']
-        atr_pct = (btc_row['atr'] / btc_row['close']) * 100
-        if adx > 25:
-            return "TRENDING_BULL" if rsi > 55 else ("TRENDING_BEAR" if rsi < 45 else "TRENDING_NEUTRAL")
-        return "HIGH_VOL_CHOP" if atr_pct > 0.8 else "LOW_VOL_ACCUMULATION"
+        """10-Phase Market Cycle Detection (Synchronized with core)"""
+        if btc_row is None or btc_row.empty: return "UNKNOWN"
+        
+        adx = btc_row['adx']
+        rsi = btc_row['rsi']
+        ema20 = btc_row['ema20']
+        ema50 = btc_row['ema50']
+        bbw = btc_row['bbw']
+        is_uptrend = ema20 > ema50
+        
+        if is_uptrend:
+            if adx > 20 and rsi > 52: # Calibrated for January Alpha capture
+                return "EARLY_BULL_BREAKOUT" if adx < 35 else "MATURE_BULL_EXTENSION"
+            if rsi < 48: return "BULL_CORRECTION"
+        else:
+            if adx > 20 and rsi < 48:
+                return "EARLY_BEAR_BREAKDOWN" if adx < 35 else "MATURE_BEAR_DECLINE"
+            if rsi > 52: return "BEAR_BOUNCE"
+            
+        if bbw < 0.015: return "ACCUMULATION"
+        if bbw > 0.04: return "CONSOLIDATION_WIDE"
+        return "CONSOLIDATION_NARROW"
 
-    def compute_strategy_score(self, h_row, btc_row):
+    def compute_strategy_score(self, h_row, btc_row, m_row=None):
+        # 1. Indicator Votes
         rsi_sig = 1 if h_row['rsi'] < 30 else (-1 if h_row['rsi'] > 70 else 0)
         ult_sig = 1 if h_row['ultosc'] < 30 else (-1 if h_row['ultosc'] > 70 else 0)
         macd_sig = 1 if h_row['macd'] > h_row['macd_s'] else -1
-        score = (0.2 * rsi_sig) + (0.2 * ult_sig) + (0.4 * macd_sig)
-        if h_row['volume'] > h_row['vol_sma'] and h_row['close'] > h_row['ema20']: score += 0.2
-        return score
+        
+        # 2. MTF Quorum Check (Simulated)
+        # We check if 1h trend matches our signal
+        ema_match = 1 if h_row['ema20'] > h_row['ema50'] else -1
+        
+        votes = [rsi_sig, ult_sig, macd_sig, ema_match]
+        buy_votes = sum(1 for v in votes if v == 1)
+        sell_votes = sum(1 for v in votes if v == -1)
+        
+        quorum = buy_votes >= 2 or sell_votes >= 2
+        
+        # 3. Final Ensemble Score
+        base = (0.15 * rsi_sig) + (0.15 * ult_sig) + (0.5 * macd_sig) + (0.2 * ema_match)
+        return base, max(buy_votes, sell_votes)
 
     def run_backtest(self, symbol):
         df_h, df_m = self.load_data(symbol)
         if df_h is None or self.btc_h is None: return
         df_h['rsi'] = compute_rsi(df_h['close']); df_h['ultosc'] = compute_ultosc(df_h)
-        df_h['atr'] = compute_atr(df_h); df_h['ema20'] = compute_ema(df_h['close'], 20)
+        df_h['atr'] = compute_atr(df_h)
+        df_h['atr_short'] = compute_atr(df_h, 5)
+        df_h['atr_long'] = compute_atr(df_h, 30)
+        df_h['ema20'] = compute_ema(df_h['close'], 20)
         df_h['ema50'] = compute_ema(df_h['close'], 50)
         ema12 = compute_ema(df_h['close'], 12); ema26 = compute_ema(df_h['close'], 26)
         df_h['macd'] = ema12 - ema26; df_h['macd_s'] = compute_ema(df_h['macd'], 9)
@@ -134,28 +179,95 @@ class ExpertBacktestEngine:
                     pnl_g = (real_ex - pos['entry_raw']) * pos['qty'] if pos['side'] == 'LONG' else (pos['entry_raw'] - real_ex) * pos['qty']
                     pnl_n = pnl_g - (pos['entry_fee'] + (real_ex * pos['qty'] * FEE_RATE))
                     self.capital += pnl_n
-                    self.trades.append({'symbol': symbol, 'side': pos['side'], 'pnl_net': pnl_n, 'reason': reason, 'time': curr_ts, 'regime': regime})
+                    self.trades.append({
+                        'symbol': symbol, 'side': pos['side'], 'pnl_net': pnl_n, 
+                        'reason': reason, 'time': curr_ts, 'regime': regime, 
+                        'strategy': pos.get('strategy', 'unknown')
+                    })
                     del self.positions[symbol]; continue
 
-            score = self.compute_strategy_score(h_row, btc_row)
-            regime_mults = {'TRENDING_BULL': 1.5, 'TRENDING_BEAR': 1.2, 'HIGH_VOL_CHOP': 0.1, 'LOW_VOL_ACCUMULATION': 0.4}
-            mult = regime_mults.get(regime, 1.0)
+            # 1. Strategy & Risk Gating
+            # 1. Market Regime & Quorum (Nuclear Hardening v10.0)
+            regime = self.detect_regime(btc_row)
             
-            if abs(score) >= 0.35 and symbol not in self.positions:
+            # Institutional Gating Dictionary
+            regime_mults = {
+                'TRENDING_BULL': 1.5,
+                'TRENDING_BEAR': 1.2,
+                'MATURE_BULL_EXTENSION': 1.0,
+                'MATURE_BEAR_DECLINE': 1.0,
+                'EARLY_BULL_BREAKOUT': 0.8,
+                'EARLY_BEAR_BREAKDOWN': 0.8,
+                'BULL_CORRECTION': 0.0,    # NUCLEAR GATE ✅
+                'BEAR_BOUNCE': 0.0,        # NUCLEAR GATE ✅
+                'CONSOLIDATION_WIDE': 0.0, # NUCLEAR GATE ✅
+                'CONSOLIDATION_NARROW': 0.0,# NUCLEAR GATE ✅
+                'ACCUMULATION': 0.0,        # NUCLEAR GATE ✅
+                'HIGH_VOL_CHOP': 0.1       # DEFENSIVE ✅
+            }
+            
+            # ABSOLUTE GATE CHECK
+            mult = regime_mults.get(regime, 0.0) # Default to 0.0 for safety
+            if mult <= 0.0:
+                continue
+
+            score, votes_agreement = self.compute_strategy_score(h_row, btc_row)
+            required_v = self.strategy_selector.get_required_quorum(regime)
+            
+            # 2. Portfolio Lockdown (Anti-Liquidation)
+            current_pnl_pct = (self.capital - self.initial_capital) / self.initial_capital * 100
+            lockdown_mult = self.risk_engine.get_lockdown_multiplier(current_pnl_pct)
+            
+            # 2a. Global Volatility Gate (Institutional Predator v8.0)
+            atr_short = h_row['atr_short']
+            atr_long = h_row['atr_long']
+            vol_coeff = atr_short / (atr_long + 1e-9) if atr_long > 0 else 1.0
+            
+            vol_tighten = 1.0
+            if vol_coeff > 1.8: vol_tighten = 0.5  # Adaptive Stop-Loss Tightening
+            
+            mult *= lockdown_mult
+            if len(self.positions) >= self.risk_engine.max_simultaneous_trades:
+                continue
+
+            # 4. Signal Validation
+            required_conf = 0.50 
+            required_v = self.strategy_selector.get_required_quorum(regime)
+            
+            if "CONSOLIDATION" in regime: required_conf = 0.85 # Harder to enter in chop
+            if "BREAKOUT" in regime: required_conf = 0.85      # Quality filter for breakouts
+            
+            if abs(score) >= required_conf and votes_agreement >= required_v and symbol not in self.positions:
                 side = 'LONG' if score > 0 else 'SHORT'
                 if side == 'SHORT' and regime == 'TRENDING_BULL': continue
-                if (side == 'LONG' and h_row['ema20'] < h_row['ema50']) or (side == 'SHORT' and h_row['ema20'] > h_row['ema50']): continue
                 
+                # 1. Strategy Selection (Autonomous Phase 1)
+                strategy = self.strategy_selector.regime_map.get(regime)
+                if not strategy:
+                    if _ % 100 == 0: log.debug(f"Block: {symbol} in {regime}")
+                    continue
+                
+                # 2. Advanced Risk Engine (Predator Adaptive Stops v8.0)
+                m = self.risk_engine.stop_multipliers.get(regime, {'sl': 3.0, 'tp': 6.0})
                 atr = h_row['atr'] if h_row['atr'] > 0 else price * 0.01
-                sl = price - (atr * 2.5) if side == 'LONG' else price + (atr * 2.5)
-                tp = price + (atr * 5.5) if side == 'LONG' else price - (atr * 5.5)
                 
-                risk_amt = self.capital * 0.005 * mult
+                # Apply volatility tightening to SL
+                sl = price - (atr * m['sl'] * vol_tighten) if side == 'LONG' else price + (atr * m['sl'] * vol_tighten)
+                tp = price + (atr * m['tp']) if side == 'LONG' else price - (atr * m['tp'])
+                
+                # Kelly Sizing Simulation
+                # Use mult as a performance bias
+                risk_pct = 0.02 * mult # 2% Base Risk * Regime Mult
+                risk_amt = self.capital * risk_pct
                 qty = risk_amt / (abs(price - sl) + 1e-9)
+                
                 slip = self.slippage_model.estimate_slippage(symbol, tier, qty, price)
                 real_en = price * (1 + slip) if side == 'LONG' else price * (1 - slip)
-                self.positions[symbol] = {'side': side, 'entry_raw': price, 'entry_fee': (qty*price*FEE_RATE), 'qty': qty, 'sl': sl, 'tp': tp, 'regime': regime}
-                log.info(f"✅ [ENTRY] {symbol} {side} Score:{score:.2f} Reg:{regime} Mult:{mult:.1f}")
+                self.positions[symbol] = {
+                    'side': side, 'entry_raw': price, 'entry_fee': (qty*price*FEE_RATE), 
+                    'qty': qty, 'sl': sl, 'tp': tp, 'regime': regime, 'strategy': strategy
+                }
+                log.info(f"✅ [ENTRY] {symbol} {side} ({strategy}) Score:{score:.2f} Reg:{regime}")
 
     def generate_report(self):
         if not self.trades: return "# Backtest Report\nNo trades."
@@ -168,7 +280,14 @@ class ExpertBacktestEngine:
         report += "## Performance by Regime\n"
         for reg, group in df.groupby('regime'):
             report += f"- **{reg}**: ${group['pnl_net'].sum():+.2f} ({len(group)} trades)\n"
-        report += "\n## Recent Trades\n" + df.tail(15)[['time', 'symbol', 'side', 'pnl_net', 'reason', 'regime']].to_markdown()
+            
+        report += "\n## Portfolio Attribution by Strategy\n"
+        if 'strategy' in df.columns:
+            for strat, group in df.groupby('strategy'):
+                win_rate = len(group[group['pnl_net']>0])/len(group)*100
+                report += f"- **{strat.upper()}**: ${group['pnl_net'].sum():+.2f} | Win Rate: {win_rate:.1f}% | {len(group)} trades\n"
+        
+        report += "\n## Recent Trades\n" + df.tail(15)[['time', 'symbol', 'side', 'strategy', 'pnl_net', 'reason', 'regime']].to_markdown()
         return report
 
 def compute_adx_df(df, window=14):
@@ -185,18 +304,25 @@ def compute_adx_df(df, window=14):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--live", action="store_true", help="Fetch live data from Binance")
+    parser.add_argument("--dir", type=str, help="Override data directory", default=None)
+    parser.add_argument("--output", type=str, help="Override report filename", default=None)
     args = parser.parse_args()
     
     all_symbols = []
     for t in SYMBOL_CONFIG: all_symbols.extend(SYMBOL_CONFIG[t])
     
-    engine = ExpertBacktestEngine(all_symbols, INITIAL_CAPITAL_USD, live_mode=args.live)
+    engine = ExpertBacktestEngine(all_symbols, INITIAL_CAPITAL_USD, live_mode=args.live, data_dir=args.dir)
     for s in all_symbols:
         try: engine.run_backtest(s)
         except Exception as e: log.error(f"Error {s}: {e}")
             
     report = engine.generate_report()
     print(report)
-    fname = "backtest_hybrid_live_report.md" if args.live else "backtest_hybrid_csv_report.md"
+    
+    if args.output:
+        fname = args.output
+    else:
+        fname = "backtest_hybrid_live_report.md" if args.live else "backtest_hybrid_csv_report.md"
+        
     with open(fname, "w") as f: f.write(report)
     log.info(f"Expert Phase 7 Completed. Report saved to {fname}")

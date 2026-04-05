@@ -4,44 +4,54 @@ from typing import Tuple, List, Optional
 
 def compute_thresholds(percentage_returns: np.ndarray) -> Tuple[float, float]:
     """
-    Compute Triple Barrier Labeling thresholds a and b based on return percentiles.
+    Refined Triple Barrier thresholds based on risk/reward distribution.
+    a = High conviction threshold
+    b = Extreme volatility threshold (noise ceiling)
     """
     if len(percentage_returns) == 0:
-        return 0.01, 0.05
-    a = np.percentile(percentage_returns, 85)
-    b = np.percentile(percentage_returns, 99.7)
+        return 0.005, 0.02
+    
+    returns_abs = np.abs(percentage_returns)
+    # Using 90th and 99th percentiles for more consistent labeling
+    a = np.percentile(returns_abs, 90)
+    b = np.percentile(returns_abs, 99)
+    
+    # Ensure minimum thresholds to cover fees (at least 0.2%)
+    a = max(a, 0.002)
+    b = max(b, 0.005)
+    
     return a, b
 
-def labeling_algorithm(close_prices: pd.Series, backW: int, forW: int, a: float, b: float, f: float = 0.005) -> List[str]:
+def labeling_algorithm(close_prices: pd.Series, backW: int, forW: int, a: float, b: float, f: float = 0.0004) -> List[str]:
     """
-    Triple Barrier Labeling algorithm from the GitHub repository.
+    Upgraded Triple Barrier Labeling with realistic costs and lookahead validation.
     
     Args:
         close_prices: Series of closing prices.
         backW: Backward window for EMA smoothing.
-        forW: Forward window for calculating returns.
-        a: Lower threshold for buy/sell.
-        b: Upper threshold for buy/sell.
-        f: Fee or perturbation factor.
+        forW: Forward window (lookahead) for calculating target returns.
+        a: Target return threshold (min to consider BUY/SELL).
+        b: Noise ceiling (reject if return is extreme/anomalous).
+        f: Transaction fee (taker fee 0.04% default).
     """
-    # Smooth prices with EMA
-    smoothed_prices = close_prices.ewm(span=backW, min_periods=backW).mean()
-    smoothed_values = smoothed_prices.values
-
+    # Smooth prices with EMA to filter micro-volatility
+    smoothed = close_prices.ewm(span=backW, min_periods=backW).mean().values
+    
     labels = []
-    for i in range(len(smoothed_values) - forW):
-        # Compute return of smoothed prices
-        future_val = smoothed_values[i + forW]
-        current_val = smoothed_values[i]
+    # Loop over indices with enough lookahead
+    for i in range(len(smoothed) - forW):
+        current_val = smoothed[i]
         
-        R = ((1 - f) * future_val - (1 + f) * current_val) / current_val
+        # Look for first barrier hit in the forward window
+        # In this simplified version, we just check the price at forW
+        future_val = smoothed[i + forW]
         
-        # Check if return falls within thresholds a and b
-        if a < abs(R) < b:
-            if R > 0:
-                labels.append('Buy')
-            else:
-                labels.append('Sell')
+        # Net return after round-trip fees (2 * f)
+        net_ret = ((future_val - current_val) / current_val) - (2 * f)
+        
+        # Action Gating: Signal must exceed 'a' but stay below anomalous 'b'
+        if a < abs(net_ret) < b:
+            labels.append('Buy' if net_ret > 0 else 'Sell')
         else:
             labels.append('Hold')
             

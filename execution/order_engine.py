@@ -22,6 +22,7 @@ class OrderEngine:
         self.portfolio_risk = portfolio_risk
         self.running = False
         self.use_testnet = settings.BINANCE_TESTNET
+        self.dry_run = settings.DRY_RUN
         
         # Consistent key hierarchy (Demo -> Test -> Real)
         self.api_key = (
@@ -238,94 +239,53 @@ class OrderEngine:
 
     async def _execute_open(self, symbol: str, side: str, qty: float, price: float, stop: float, tp: float, strategy: str = 'UNKNOWN'):
         main_side = 'BUY' if side == 'LONG' else 'SELL'
-        qty_str = f"{qty}"
         
-        # --- SMART ORDER ROUTING (Maker Priority) ---
-        log.info(f"⚡ [SOR] Attempting LIMIT order for {symbol} to save fees...")
-        
-        # Use a slightly aggressive limit price (better than mid)
-        try:
-            limit_price = price # We assume price is the best price from book
-            limit_order = await self.client.futures_create_order(
-                symbol=symbol,
-                side=main_side,
-                type='LIMIT',
-                timeInForce='GTX', # Post Only
-                quantity=qty_str,
-                price=str(limit_price)
-            )
-            
-            # Wait for fill or timeout
-            for _ in range(5): # 5 seconds
-                await asyncio.sleep(1)
-                status = await self.client.futures_get_order(symbol=symbol, orderId=limit_order['orderId'])
-                if status['status'] == 'FILLED':
-                    log.info(f"✅ [SOR] Limit order FILLED (MAKER) for {symbol}")
-                    break
-            else:
-                # Not filled -> Cancel and Market
-                log.warning(f"⏳ [SOR] Limit order timeout for {symbol}. Falling back to MARKET.")
-                await self.client.futures_cancel_order(symbol=symbol, orderId=limit_order['orderId'])
-                main_order = await self.client.futures_create_order(
-                    symbol=symbol,
-                    side=main_side,
-                    type='MARKET',
-                    quantity=qty_str
-                )
-                log.info(f"🚀 [SOR] Market order FILLED (TAKER) for {symbol}")
-        except BinanceAPIException as e:
-            if e.code == -2011: # Cancel rejected (already filled?)
-                 log.info(f"✅ [SOR] Order already filled or closed.")
-            else:
-                # Fallback to pure market if limit setup fails
-                main_order = await self.client.futures_create_order(
-                    symbol=symbol,
-                    side=main_side,
-                    type='MARKET',
-                    quantity=qty_str
-                )
+        if self.dry_run:
+            log.info(f"🧪 [DRY RUN] Simulating {main_side} {symbol} qty={qty}")
+            main_order = {
+                'orderId': f'DRY_{int(datetime.utcnow().timestamp())}',
+                'updateTime': int(datetime.utcnow().timestamp() * 1000),
+                'avgPrice': price
+            }
+        else:
+            qty_str = f"{qty}"
+            log.info(f"⚡ [SOR] Attempting LIMIT order for {symbol} to save fees...")
+            try:
+                limit_order = await self.client.futures_create_order(
+                    symbol=symbol, side=main_side, type='LIMIT', timeInForce='GTX', quantity=qty_str, price=str(price))
+                for _ in range(5):
+                    await asyncio.sleep(1)
+                    status = await self.client.futures_get_order(symbol=symbol, orderId=limit_order['orderId'])
+                    if status['status'] == 'FILLED':
+                        main_order = status; break
+                else:
+                    await self.client.futures_cancel_order(symbol=symbol, orderId=limit_order['orderId'])
+                    main_order = await self.client.futures_create_order(symbol=symbol, side=main_side, type='MARKET', quantity=qty_str)
+            except:
+                main_order = await self.client.futures_create_order(symbol=symbol, side=main_side, type='MARKET', quantity=qty_str)
 
-        # --- FIREBASE SYNC: Order Record ---
+        # Sync to Firebase
         self.state.firebase.set(f"trading/orders/{main_order['orderId']}", {
-            "symbol": symbol,
-            "type": "MARKET",
-            "side": main_side,
-            "quantity": qty,
-            "price": float(main_order.get('avgPrice', price)),
-            "status": "FILLED",
-            "timestamp": int(main_order['updateTime']),
-            "binance_order_id": main_order['orderId'],
-            "strategy": strategy
+            "symbol": symbol, "type": "MARKET", "side": main_side, "quantity": qty,
+            "price": float(main_order.get('avgPrice', price)), "status": "FILLED",
+            "timestamp": int(main_order['updateTime']), "binance_order_id": main_order['orderId'], "strategy": strategy
         })
 
-        exit_side = 'SELL' if side == 'LONG' else 'BUY'
+        if not self.dry_run:
+            exit_side = 'SELL' if side == 'LONG' else 'BUY'
+            if stop and stop > 0:
+                await self.client.futures_create_order(symbol=symbol, side=exit_side, type='STOP_MARKET', stopPrice=round(stop, 1), closePosition='true', timeInForce='GTC')
+            if tp and tp > 0:
+                await self.client.futures_create_order(symbol=symbol, side=exit_side, type='TAKE_PROFIT_MARKET', stopPrice=round(tp, 1), closePosition='true', timeInForce='GTC')
 
-        if stop and stop > 0:
-            stop_price = round(stop, 1)
-            await self.client.futures_create_order(
-                symbol=symbol,
-                side=exit_side,
-                type='STOP_MARKET',
-                stopPrice=stop_price,
-                closePosition='true',
-                timeInForce='GTC'
-            )
-            
-        if tp and tp > 0:
-            tp_price = round(tp, 1)
-            await self.client.futures_create_order(
-                symbol=symbol,
-                side=exit_side,
-                type='TAKE_PROFIT_MARKET',
-                stopPrice=tp_price,
-                closePosition='true',
-                timeInForce='GTC'
-            )
-            
     async def _execute_close(self, symbol: str, side: str, qty: float):
         exit_side = 'SELL' if side == 'LONG' else 'BUY'
-        qty_str = f"{qty:.3f}" if 'BTC' in symbol else f"{qty:.2f}"
         
+        if self.dry_run:
+            log.info(f"🧪 [DRY RUN] Simulating CLOSE {side} {symbol}")
+            return
+
+        qty_str = f"{qty:.3f}" if 'BTC' in symbol else f"{qty:.2f}"
         log.info(f"[TESTNET ORDER] CLOSE {side} {symbol} qty={qty_str}")
         
         try:
@@ -337,13 +297,9 @@ class OrderEngine:
                 reduceOnly='true'
             )
             log.info(f"[TESTNET FILLED] order_id={close_order['orderId']}")
-        except BinanceAPIException as e:
-            if e.code == -2022:
-                log.warning(f"⚠️ [TESTNET] ReduceOnly rejected for {symbol}: No position to close on exchange.")
-            else:
-                raise e
-        
-        await self.client.futures_cancel_all_open_orders(symbol=symbol)
+            await self.client.futures_cancel_all_open_orders(symbol=symbol)
+        except Exception as e:
+            log.warning(f"⚠️ Close failed for {symbol}: {e}")
 
     async def get_active_orders(self) -> list:
         """Fetch all open orders from Binance Futures."""

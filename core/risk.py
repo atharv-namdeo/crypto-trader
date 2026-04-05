@@ -25,7 +25,7 @@ class RiskManager:
     MAX_ASSET_EXPOSURE   = 0.50    # 50% capital per asset
     MAX_DAILY_DRAWDOWN   = 0.05    # 5% daily loss → halt
     MAX_WEEKLY_DRAWDOWN  = 0.15    # 15% weekly loss → halt
-    MIN_RR_RATIO         = 1.5     # minimum risk:reward
+    MIN_RR_RATIO         = 2.0     # Final Profit Optimized: 2:1 Minimum RR Ratio
     MAX_LEVERAGE         = 10.0    # absolute max for crypto
 
     # ── Position sizing ───────────────────────────────────────────────────
@@ -80,23 +80,39 @@ class RiskManager:
         strategy: str,
         atr: float,
         price: float,
+        regime: str = "NEUTRAL",
         stop_atr_multiple: float = 1.5,
     ) -> dict:
         """
-        Kelly-optimized dynamic sizing with Drawdown Multiplier.
+        Regime-aware Kelly-optimized dynamic sizing.
         """
-        # 1. Get Kelly Base Risk
+        # 1. Get Base Kelly Risk
         risk_pct = await self.kelly.get_optimal_risk(strategy) if self.kelly else self.BASE_RISK_PCT
         
-        # 2. Apply Graduated Drawdown Multiplier
+        # 2. Regime-based Multiplier (Phase 8 Upgrade)
+        regime_mults = {
+            'EARLY_BULL_BREAKOUT': 2.0,  # Aggressive Breakout Capture
+            'MATURE_BULL_EXTENSION': 1.0,
+            'BULL_CORRECTION': 0.8,
+            'EARLY_BEAR_BREAKDOWN': 2.0, # Aggressive Breakdown Capture
+            'HIGH_VOL_CHOP': 0.1,         # Further reduced for chop protection
+            'ACCUMULATION': 0.5,
+            'NEUTRAL': 0.8
+        }
+        mult = regime_mults.get(regime, 0.4)
+        
+        # 3. Apply Graduated Drawdown Multiplier
         dd_mult = await self.kelly.get_drawdown_multiplier() if self.kelly else 1.0
-        final_risk_pct = risk_pct * dd_mult
+        final_risk_pct = risk_pct * mult * dd_mult
+        
+        # Cap risk to hard max
+        final_risk_pct = min(final_risk_pct, self.MAX_RISK_PCT)
 
         stop_distance = stop_atr_multiple * atr
         if stop_distance <= 0 or price <= 0:
             return {'qty': 0.0, 'notional': 0.0, 'risk_pct': 0.0}
 
-        # notional such that stop loss = final_risk_pct of capital
+        # Quantity such that stop loss = final_risk_pct of capital
         notional = (capital * final_risk_pct) / (stop_distance / price)
         qty = notional / price
 
@@ -104,7 +120,8 @@ class RiskManager:
             'qty':      qty,
             'notional': notional,
             'risk_pct': final_risk_pct,
-            'dd_mult':  dd_mult
+            'regime':   regime,
+            'mult':     mult
         }
 
     def validate_trade(
@@ -254,17 +271,48 @@ class RiskManager:
         log.info(f"⚖️ Dynamic Size for {symbol}: {qty:.4f} (Risk:{risk_pct*100:.1f}%)")
         return True, qty
 
-    def get_stop_loss(self, side: str, entry: float, atr: float, multiplier: float = 1.5) -> float:
-        """ATR-based adaptive stop loss."""
-        # multiplier reduced to 1.5 for conservative risk
-        dist = atr * multiplier
-        return entry - dist if side == 'LONG' else entry + dist
+    def calculate_adaptive_stops(self, price: float, atr: float, regime: str, side: str = 'LONG') -> dict:
+        """
+        Calculates dynamic stops based on market regime to avoid SL whipsaws.
+        """
+        regime_multipliers = {
+            'TRENDING_BULL':       {'sl': 3.5, 'tp': 7.0},
+            'TRENDING_BEAR':       {'sl': 3.5, 'tp': 7.0},
+            'EARLY_BULL_BREAKOUT': {'sl': 3.0, 'tp': 8.0},
+            'HIGH_VOL_CHOP':       {'sl': 2.0, 'tp': 5.0},
+            'LOW_VOL_ACCUMULATION': {'sl': 4.0, 'tp': 6.0},
+            'NEUTRAL':             {'sl': 3.0, 'tp': 6.0}
+        }
+        
+        mult = regime_multipliers.get(regime, {'sl': 3.0, 'tp': 6.0})
+        
+        sl_dist = atr * mult['sl']
+        tp_dist = atr * mult['tp']
+        
+        if side == 'LONG':
+            return {
+                'stop': price - sl_dist,
+                'tp':   price + tp_dist,
+                'sl_mult': mult['sl'],
+                'tp_mult': mult['tp']
+            }
+        else:
+            return {
+                'stop': price + sl_dist,
+                'tp':   price - tp_dist,
+                'sl_mult': mult['sl'],
+                'tp_mult': mult['tp']
+            }
 
-    def get_take_profit(self, side: str, entry: float, atr: float, multiplier: float = 3.0) -> float:
-        """ATR-based adaptive take profit."""
-        # multiplier reduced to 3.0 for better risk/reward capture
-        dist = atr * multiplier
-        return entry + dist if side == 'LONG' else entry - dist
+    def get_stop_loss(self, side: str, entry: float, atr: float, regime: str = 'NEUTRAL') -> float:
+        """Regime-aware adaptive stop loss."""
+        stops = self.calculate_adaptive_stops(entry, atr, regime, side)
+        return stops['stop']
+
+    def get_take_profit(self, side: str, entry: float, atr: float, regime: str = 'NEUTRAL') -> float:
+        """Regime-aware adaptive take profit."""
+        stops = self.calculate_adaptive_stops(entry, atr, regime, side)
+        return stops['tp']
 
     def get_smart_trailing_stop(self, side: str, current: float, entry: float, atr: float, last_stop: float) -> float:
         """Adaptive trailing stop: moves only in favor of profit."""
