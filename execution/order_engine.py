@@ -18,11 +18,13 @@ log = logging.getLogger("OrderEngine")
 class OrderEngine:
     def __init__(self, state: StateManager, portfolio_risk=None):
         from config import settings
+        from core.telegram_notifier import TelegramNotifier
         self.state = state
         self.portfolio_risk = portfolio_risk
         self.running = False
         self.use_testnet = settings.BINANCE_TESTNET
         self.dry_run = settings.DRY_RUN
+        self.telegram = TelegramNotifier()
         
         # Consistent key hierarchy (Demo -> Test -> Real)
         self.api_key = (
@@ -264,6 +266,12 @@ class OrderEngine:
             except:
                 main_order = await self.client.futures_create_order(symbol=symbol, side=main_side, type='MARKET', quantity=qty_str)
 
+        # Telegram Alert (Phase 11 Activation)
+        await self.telegram.trade_opened(
+            strategy=strategy, symbol=symbol, side=side, entry=price,
+            qty=qty, stop=stop, tp=tp, conviction=0.85 
+        )
+
         # Sync to Firebase
         self.state.firebase.set(f"trading/orders/{main_order['orderId']}", {
             "symbol": symbol, "type": "MARKET", "side": main_side, "quantity": qty,
@@ -289,6 +297,13 @@ class OrderEngine:
         log.info(f"[TESTNET ORDER] CLOSE {side} {symbol} qty={qty_str}")
         
         try:
+            # Telegram Alert (Phase 11 Activation)
+            price = await self.state.get_float(f"price:{symbol}")
+            await self.telegram.trade_closed(
+                strategy="ENSEMBLE", symbol=symbol, side=side,
+                entry=0.0, exit_price=price, qty=qty, pnl=0.0, reason="Signal Close", duration="LIVE"
+            )
+
             close_order = await self.client.futures_create_order(
                 symbol=symbol,
                 side=exit_side,

@@ -110,6 +110,35 @@ def create_app(state: StateManager):
             await state.set(f"settings:{k}", v)
         return {"status": "updated"}
 
+    @app.post("/api/v1/backtest/run")
+    async def run_backtest_audit(payload: dict = Body(...)):
+        """Trigger high-fidelity audit from dashboard."""
+        from core.backtest_bridge import BacktestBridge
+        bridge = BacktestBridge()
+        
+        symbol = payload.get('symbol', 'BTC/USDT')
+        start = payload.get('start', '2024-01-01')
+        end = payload.get('end', '2024-04-01')
+        
+        # Dispatch in background to avoid blocking FastAPI workers
+        def run_in_background():
+            results = bridge.run_sync(symbol, start, end)
+            # Store results in Redis for frontend to poll/fetch
+            asyncio.run(state.set("backtest:last_results", results))
+            asyncio.run(state.set("backtest:status", "idle"))
+            log.info("📊 Strategic Audit results pushed to Redis.")
+
+        await state.set("backtest:status", "running")
+        asyncio.create_task(asyncio.to_thread(run_in_background))
+        
+        return {"status": "started", "message": f"Simulating {symbol} from {start}"}
+
+    @app.get("/api/v1/backtest/results")
+    async def get_backtest_results():
+        status = await state.get("backtest:status") or "idle"
+        results = await state.get("backtest:last_results") or {}
+        return {"status": status, "results": results}
+
     @app.get("/ml/ensemble-signal/{symbol}")
     async def get_ensemble_signal(symbol: str):
         data = await state.get(f"ensemble_signal:{symbol}")

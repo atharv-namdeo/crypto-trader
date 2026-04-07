@@ -266,3 +266,17 @@ class PreLaunchValidator:
         log.info("="*60 + "\n")
         
         return passed == total
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    async def main():
+        state = StateManager()
+        validator = PreLaunchValidator(state)
+        passed = await validator.run_full_validation()
+        validator.print_validation_report()
+        
+    asyncio.run(main())

@@ -1,0 +1,2 @@
+# Backtest Report
+No trades.

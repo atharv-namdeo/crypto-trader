@@ -153,6 +153,7 @@ class ExpertBacktestEngine:
         if not self.live_mode: sim_df = sim_df.tail(2000)
         
         tier = self.slippage_model.get_tier(symbol)
+        lockdown_until = None
         
         for _, m_row in sim_df.iterrows():
             curr_ts = m_row['ts']
@@ -160,73 +161,41 @@ class ExpertBacktestEngine:
             btc_slice = self.btc_h[self.btc_h['ts'] <= curr_ts]
             if h_slice.empty or btc_slice.empty: continue
             h_row, btc_row = h_slice.iloc[-1], btc_slice.iloc[-1]
-            regime = self.detect_regime(btc_row)
             price = m_row['close']
             
-            if symbol in self.positions:
-                pos = self.positions[symbol]
-                exit_p = None; reason = None
-                if pos['side'] == 'LONG':
-                    if m_row['low'] <= pos['sl']: exit_p, reason = pos['sl'], "STOP_LOSS"
-                    elif m_row['high'] >= pos['tp']: exit_p, reason = pos['tp'], "TAKE_PROFIT"
-                else:
-                    if m_row['high'] >= pos['sl']: exit_p, reason = pos['sl'], "STOP_LOSS"
-                    elif m_row['low'] <= pos['tp']: exit_p, reason = pos['tp'], "TAKE_PROFIT"
-                
-                if exit_p:
-                    slip = self.slippage_model.estimate_slippage(symbol, tier, pos['qty'], exit_p)
-                    real_ex = exit_p * (1 - slip) if pos['side'] == 'LONG' else exit_p * (1 + slip)
-                    pnl_g = (real_ex - pos['entry_raw']) * pos['qty'] if pos['side'] == 'LONG' else (pos['entry_raw'] - real_ex) * pos['qty']
-                    pnl_n = pnl_g - (pos['entry_fee'] + (real_ex * pos['qty'] * FEE_RATE))
-                    self.capital += pnl_n
-                    self.trades.append({
-                        'symbol': symbol, 'side': pos['side'], 'pnl_net': pnl_n, 
-                        'reason': reason, 'time': curr_ts, 'regime': regime, 
-                        'strategy': pos.get('strategy', 'unknown')
-                    })
-                    del self.positions[symbol]; continue
-
-            # 1. Strategy & Risk Gating
-            # 1. Market Regime & Quorum (Nuclear Hardening v10.0)
-            regime = self.detect_regime(btc_row)
-            
-            # Institutional Gating Dictionary
-            regime_mults = {
-                'TRENDING_BULL': 1.5,
-                'TRENDING_BEAR': 1.2,
-                'MATURE_BULL_EXTENSION': 1.0,
-                'MATURE_BEAR_DECLINE': 1.0,
-                'EARLY_BULL_BREAKOUT': 0.8,
-                'EARLY_BEAR_BREAKDOWN': 0.8,
-                'BULL_CORRECTION': 0.0,    # NUCLEAR GATE ✅
-                'BEAR_BOUNCE': 0.0,        # NUCLEAR GATE ✅
-                'CONSOLIDATION_WIDE': 0.0, # NUCLEAR GATE ✅
-                'CONSOLIDATION_NARROW': 0.0,# NUCLEAR GATE ✅
-                'ACCUMULATION': 0.0,        # NUCLEAR GATE ✅
-                'HIGH_VOL_CHOP': 0.1       # DEFENSIVE ✅
-            }
-            
-            # ABSOLUTE GATE CHECK
-            mult = regime_mults.get(regime, 0.0) # Default to 0.0 for safety
-            if mult <= 0.0:
-                continue
-
-            score, votes_agreement = self.compute_strategy_score(h_row, btc_row)
-            required_v = self.strategy_selector.get_required_quorum(regime)
-            
-            # 2. Portfolio Lockdown (Anti-Liquidation)
-            current_pnl_pct = (self.capital - self.initial_capital) / self.initial_capital * 100
-            lockdown_mult = self.risk_engine.get_lockdown_multiplier(current_pnl_pct)
-            
-            # 2a. Global Volatility Gate (Institutional Predator v8.0)
+            # [NEW] SOVEREIGN SHIELD (Survival Patch v11.1.4)
+            # Priority 1: Global Volatility Kill-Switch
             atr_short = h_row['atr_short']
             atr_long = h_row['atr_long']
             vol_coeff = atr_short / (atr_long + 1e-9) if atr_long > 0 else 1.0
             
-            vol_tighten = 1.0
-            if vol_coeff > 1.8: vol_tighten = 0.5  # Adaptive Stop-Loss Tightening
+            if lockdown_until and curr_ts < lockdown_until:
+                continue # In mandated cooldown
             
-            mult *= lockdown_mult
+            if vol_coeff > 1.5: 
+                # EMERGENCY KILL-SWITCH
+                if self.positions:
+                    log.warning(f"🚨 NUCLEAR VOLATILITY DETECTED ({vol_coeff:.2f}) at {curr_ts}. EMERGENCY LIQUIDATION.")
+                    for sym in list(self.positions.keys()):
+                        pos = self.positions[sym]
+                        slip = self.slippage_model.estimate_slippage(sym, tier, pos['qty'], price)
+                        real_ex = price * (1 - slip) if pos['side'] == 'LONG' else price * (1 + slip)
+                        pnl_n = (real_ex - pos['entry_raw']) * pos['qty'] if pos['side'] == 'LONG' else (pos['entry_raw'] - real_ex) * pos['qty']
+                        pnl_n -= (pos['entry_fee'] + (real_ex * pos['qty'] * FEE_RATE))
+                        self.capital += pnl_n
+                        self.trades.append({
+                            'symbol': sym, 'side': pos['side'], 'pnl_net': pnl_n, 
+                            'reason': 'EMERGENCY_EXIT', 'time': curr_ts, 'regime': 'FLASH_CRASH', 
+                            'strategy': pos.get('strategy', 'unknown')
+                        })
+                        del self.positions[sym]
+                
+                log.warning(f"⚠️ SOVEREIGN SHIELD ACTUATED ({vol_coeff:.2f}) at {curr_ts}. Entry Blocked.")
+                lockdown_until = curr_ts + pd.Timedelta(hours=12)
+                continue # Forced Defensive Lockdown ✅
+            
+            if symbol in self.positions:
+                pos = self.positions[symbol]
             if len(self.positions) >= self.risk_engine.max_simultaneous_trades:
                 continue
 

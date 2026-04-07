@@ -223,6 +223,9 @@ async def main():
     log.info("🚀 QUANT ENGINE v7.1 | Dashboard Overhaul Active")
     log.info("═" * 60)
 
+    # 2.1 Verify Notifications
+    await telegram.verify_connection()
+
     # 3. Initialize Settings if missing
     defaults = {
         "scalper_enabled": "true", "scalper_threshold": 0.45,

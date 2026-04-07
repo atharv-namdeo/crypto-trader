@@ -6,41 +6,78 @@ import {
   LineChart as LineIcon, 
   List, 
   Download, 
-  ChevronRight,
-  Target,
-  TrendingUp,
-  TrendingDown
+  ChevronRight
 } from 'lucide-react';
 import Badge from '../ui/Badge';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const Backtester = () => {
-  const safeNumber = (val: any) => typeof val === 'number' ? val : parseFloat(String(val || 0)) || 0;
   const [isRunning, setIsRunning] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [results, setResults] = useState<any>(null);
+  const [dates, setDates] = useState({
+    start: '2022-01-01',
+    end: '2022-04-01'
+  });
   const [config, setConfig] = useState({
     strategy: 'AI_ENSEMBLE',
     asset: 'BTC/USDT',
-    timeframe: '15m',
-    range: '30d'
+    timeframe: '15m'
   });
 
-  // Mock data for equity curve
+  // Derived equity data from results
   const equityData = useMemo(() => {
-    let balance = 10000;
-    return Array.from({ length: 50 }, (_, i) => {
-      balance += (Math.random() - 0.45) * 200;
-      return { day: i + 1, balance };
-    });
-  }, [isRunning]);
+    if (!results?.equity_curve) {
+        return Array.from({ length: 20 }, (_, i) => ({ day: i, balance: 10000 }));
+    }
+    return results.equity_curve.map((p: any, i: number) => ({
+        day: i,
+        balance: p.balance,
+        time: p.time
+    }));
+  }, [results]);
 
-  const runBacktest = () => {
+  const pollResults = async () => {
+    try {
+      const res = await fetch('/api/v1/backtest/results');
+      const data = await res.json();
+      if (data.status === 'idle' && data.results?.status === 'success') {
+        setIsRunning(false);
+        setShowResults(true);
+        setResults(data.results);
+        return true;
+      }
+    } catch (e) {
+      console.error("Polling error", e);
+    }
+    return false;
+  };
+
+  const runBacktest = async () => {
     setIsRunning(true);
     setShowResults(false);
-    setTimeout(() => {
+    setResults(null);
+
+    try {
+      await fetch('/api/v1/backtest/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: config.asset,
+          start: dates.start,
+          end: dates.end
+        })
+      });
+
+      const interval = setInterval(async () => {
+        const done = await pollResults();
+        if (done) clearInterval(interval);
+      }, 3000);
+
+    } catch (e) {
       setIsRunning(false);
-      setShowResults(true);
-    }, 2000);
+      console.error("Backtest trigger failed", e);
+    }
   };
 
   return (
@@ -85,7 +122,11 @@ const Backtester = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest">Asset Pair</label>
-                  <select className="w-full bg-bg-primary border border-border rounded-xl px-4 py-3 text-sm font-bold text-text-primary focus:outline-none focus:border-accent-primary transition-all">
+                  <select 
+                    value={config.asset}
+                    onChange={(e) => setConfig({...config, asset: e.target.value})}
+                    className="w-full bg-bg-primary border border-border rounded-xl px-4 py-3 text-sm font-bold text-text-primary focus:outline-none focus:border-accent-primary transition-all appearance-none cursor-pointer"
+                  >
                     <option>BTC/USDT</option>
                     <option>ETH/USDT</option>
                     <option>SOL/USDT</option>
@@ -93,12 +134,38 @@ const Backtester = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest">Timeframe</label>
-                  <select className="w-full bg-bg-primary border border-border rounded-xl px-4 py-3 text-sm font-bold text-text-primary focus:outline-none focus:border-accent-primary transition-all">
+                  <select 
+                    value={config.timeframe}
+                    onChange={(e) => setConfig({...config, timeframe: e.target.value})}
+                    className="w-full bg-bg-primary border border-border rounded-xl px-4 py-3 text-sm font-bold text-text-primary focus:outline-none focus:border-accent-primary transition-all appearance-none cursor-pointer"
+                  >
                     <option>5m</option>
                     <option>15m</option>
                     <option>1h</option>
                     <option>4h</option>
                   </select>
+                </div>
+              </div>
+
+              {/* DATE RANGE SELECTION */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest">Start Date</label>
+                  <input 
+                    type="date"
+                    value={dates.start}
+                    onChange={(e) => setDates({...dates, start: e.target.value})}
+                    className="w-full bg-bg-primary border border-border rounded-xl px-4 py-3 text-[12px] font-mono font-bold text-text-primary focus:outline-none focus:border-accent-primary transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest">End Date</label>
+                  <input 
+                    type="date"
+                    value={dates.end}
+                    onChange={(e) => setDates({...dates, end: e.target.value})}
+                    className="w-full bg-bg-primary border border-border rounded-xl px-4 py-3 text-[12px] font-mono font-bold text-text-primary focus:outline-none focus:border-accent-primary transition-all"
+                  />
                 </div>
               </div>
 
@@ -133,19 +200,23 @@ const Backtester = () => {
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <span className="text-[9px] font-bold text-text-tertiary uppercase block mb-1">Net Profit</span>
-                    <span className="text-lg font-mono font-bold text-accent-success">+$2,410.50</span>
+                    <span className={`text-lg font-mono font-bold ${results?.metrics?.pnl_usd >= 0 ? 'text-accent-success' : 'text-accent-danger'}`}>
+                      {results?.metrics?.pnl_usd >= 0 ? '+' : ''}${results?.metrics?.pnl_usd.toLocaleString()}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-[9px] font-bold text-text-tertiary uppercase block mb-1">Max Drawdown</span>
-                    <span className="text-lg font-mono font-bold text-accent-danger">-4.12%</span>
+                    <span className="text-[9px] font-bold text-text-tertiary uppercase block mb-1">Total ROI</span>
+                    <span className={`text-lg font-mono font-bold ${results?.metrics?.pnl_pct >= 0 ? 'text-accent-success' : 'text-accent-danger'}`}>
+                      {results?.metrics?.pnl_pct >= 0 ? '+' : ''}{results?.metrics?.pnl_pct}%
+                    </span>
                   </div>
                   <div>
                     <span className="text-[9px] font-bold text-text-tertiary uppercase block mb-1">Win Rate</span>
-                    <span className="text-lg font-mono font-bold text-text-primary">68.4%</span>
+                    <span className="text-lg font-mono font-bold text-text-primary">{results?.metrics?.win_rate}%</span>
                   </div>
                   <div>
-                    <span className="text-[9px] font-bold text-text-tertiary uppercase block mb-1">Sharpe Ratio</span>
-                    <span className="text-lg font-mono font-bold text-text-primary">2.84</span>
+                    <span className="text-[9px] font-bold text-text-tertiary uppercase block mb-1">Trades</span>
+                    <span className="text-lg font-mono font-bold text-text-primary">{results?.metrics?.total_trades}</span>
                   </div>
                 </div>
               </motion.section>
@@ -226,16 +297,18 @@ const Backtester = () => {
                     Historical Executions
                   </h3>
                </div>
-               <div className="flex-1 overflow-y-auto no-scrollbar space-y-1.5 opacity-60">
-                  {Array.from({ length: 5 }).map((_, i) => (
+                <div className="flex-1 overflow-y-auto no-scrollbar space-y-1.5 opacity-60">
+                  {(results?.trades || []).map((t: any, i: number) => (
                     <div key={i} className="flex items-center justify-between p-2 rounded bg-bg-tertiary/20 text-[10px] font-mono border border-border/20">
                       <div className="flex items-center gap-3">
-                         <span className="text-text-tertiary">#BR-0{842-i}</span>
-                         <span className={i % 2 === 0 ? 'text-accent-success' : 'text-accent-danger'}>{i % 2 === 0 ? 'BUY' : 'SELL'}</span>
-                         <span className="text-text-primary">BTC/USDT @ $64,250</span>
+                         <span className="text-text-tertiary">{t.time.split('T')[0]}</span>
+                         <span className={t.side === 'BUY' || t.side === 'LONG' ? 'text-accent-success' : 'text-accent-danger'}>{t.side}</span>
+                         <span className="text-text-primary">{config.asset} @ {t.reason}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                         <span className={i % 2 === 0 ? 'text-accent-success' : 'text-accent-danger'}>{i % 2 === 0 ? '+$120.50' : '-$45.20'}</span>
+                         <span className={t.pnl >= 0 ? 'text-accent-success' : 'text-accent-danger'}>
+                           {t.pnl >= 0 ? '+' : ''}${t.pnl.toLocaleString()}
+                         </span>
                          <ChevronRight size={12} className="text-text-tertiary" />
                       </div>
                     </div>
