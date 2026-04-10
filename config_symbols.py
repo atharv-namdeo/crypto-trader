@@ -19,7 +19,7 @@ SYMBOL_CONFIG = {
         'UNI/USDT', 'DOT/USDT', 'BCH/USDT', 'NEAR/USDT',
         'LTC/USDT', 'XLM/USDT', 'ATOM/USDT', 'HBAR/USDT',
         'ARB/USDT', 'OP/USDT', 'PEPE/USDT', 'TON/USDT',
-        'ALGO/USDT', 'FIL/USDT', 'CRO/USDT'
+        'ALGO/USDT', 'FIL/USDT'
     ],
     CryptoTier.TIER_4: [
         'ICP/USDT', 'MANTA/USDT', 'RENDER/USDT', 'SEI/USDT',

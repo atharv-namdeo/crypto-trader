@@ -72,14 +72,20 @@ class EnterpriseTradingEngine:
                 
                 for symbol in SYMBOLS:
                     signal_data = self.state.firebase.get(f"trading/signals/{symbol}")
-                    if not signal_data or signal_data.get('action') == 'NEUTRAL':
+                    
+                    # 0. Sovereign Data Gating (Phase 11 Hardening)
+                    if not signal_data or not isinstance(signal_data, dict):
+                        continue
+                        
+                    action = signal_data.get('action', 'NEUTRAL')
+                    if action == 'NEUTRAL':
                         continue
                         
                     pos = await self.state.get_position(symbol)
                     
                     # 1. EXECUTE ENTRY (LONG/SHORT)
-                    if signal_data['action'] in ['BUY', 'SELL'] and not pos:
-                        side = "LONG" if signal_data['action'] == 'BUY' else "SHORT"
+                    if action in ['BUY', 'SELL'] and not pos:
+                        side = "LONG" if action == 'BUY' else "SHORT"
                         
                         # Apply Pre-Trade Validation Gates (Fix 3 & 4)
                         if not await self.validate_trade_quality(symbol, signal_data):
@@ -118,12 +124,12 @@ class EnterpriseTradingEngine:
                             })
                     
                     # 2. EXECUTE CLOSE
-                    elif signal_data['action'] == 'NEUTRAL' and pos:
+                    elif action == 'NEUTRAL' and pos:
                         # (Logic to handle dynamic closes if needed, or wait for SL/TP in OrderEngine)
                         pass
                     
                     # Handle Cross-Closes (e.g., BUY signal while in SHORT)
-                    elif signal_data['action'] == 'BUY' and pos and pos['side'] == 'SHORT':
+                    elif action == 'BUY' and pos and pos.get('side') == 'SHORT':
                         log.info(f"🔄 [FLIP] Closing SHORT for LONG on {symbol}")
                         await self.state.set(f"order_request:{symbol}", {
                             "symbol": symbol, "action": "CLOSE", "side": "SHORT", "qty": pos['qty']

@@ -80,6 +80,8 @@ class WebSocketManager:
                 break
             except Exception as e:
                 log.error(f"WS listen error: {e}")
+                # Break to trigger reconnect in run_forever
+                break
                 
     async def _handle_message(self, msg: dict):
         """Parse message and update Redis state."""
