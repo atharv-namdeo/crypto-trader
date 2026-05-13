@@ -1,139 +1,137 @@
+"""
+core/strategies/regime_classifier.py  — PHASE 9 REBUILD
+
+Replaced 10-phase market cycle with a 3-state EMA-200 classifier.
+Simple, robust, hard to mislabel. Prevents fighting the macro trend.
+
+OLD: 10 phases (EARLY_BULL_BREAKOUT, MATURE_BULL_EXTENSION, etc.)
+NEW: 3 states  (BULL, BEAR, NEUTRAL)
+
+Rule:
+  close >  EMA200 * 1.02  →  BULL   (longs only)
+  close <  EMA200 * 0.98  →  BEAR   (shorts only)
+  otherwise               →  NEUTRAL (no new trades)
+
+EMA200 is computed on the 1h timeframe (last 200 closes).
+"""
+
 import pandas as pd
 import numpy as np
 from enum import Enum
-from typing import Dict, Any, List
+from typing import Dict, Any
 
+# ── Keep MarketPhase enum for import compatibility with other modules ──────────
 class MarketPhase(Enum):
-    """
-    Comprehensive 10-phase market cycle classification.
-    Refines basic regime detection into actionable trading states.
-    """
-    EARLY_BULL_BREAKOUT   = "EARLY_BULL_BREAKOUT"   # ADX rising from low, RSI crossing 50
-    MATURE_BULL_EXTENSION = "MATURE_BULL_EXTENSION" # ADX > 30, High RSI, Close near channel high
-    BULL_CORRECTION       = "BULL_CORRECTION"       # pullback in uptrend (EMA 20/50 support)
-    ACCUMULATION          = "ACCUMULATION"          # low volatility, tight Bollinger Bands
-    DISTRIBUTION          = "DISTRIBUTION"          # oscillating range, volume declining on highs
-    EARLY_BEAR_BREAKDOWN  = "EARLY_BEAR_BREAKDOWN"  # ADX rising, RSI crossing below 50, below EMA
-    MATURE_BEAR_DECLINE   = "MATURE_BEAR_DECLINE"   # ADX > 30, Low RSI, new lows
-    BEAR_BOUNCE           = "BEAR_BOUNCE"           # oversold bounce in downtrend
-    CONSOLIDATION_NARROW  = "CONSOLIDATION_NARROW"  # sideways range (low noise)
-    CONSOLIDATION_WIDE    = "CONSOLIDATION_WIDE"    # sideways range (high noise/chop)
-    UNKNOWN               = "UNKNOWN"
+    BULL    = "BULL"     # price > 2% above EMA200 → longs only
+    BEAR    = "BEAR"     # price > 2% below EMA200 → shorts only
+    NEUTRAL = "NEUTRAL"  # within band            → no new trades
+    UNKNOWN = "UNKNOWN"  # insufficient data
+
+    # Legacy aliases kept so old code doesn't crash on .value comparisons
+    EARLY_BULL_BREAKOUT   = "BULL"
+    MATURE_BULL_EXTENSION = "BULL"
+    BULL_CORRECTION       = "NEUTRAL"
+    ACCUMULATION          = "NEUTRAL"
+    DISTRIBUTION          = "NEUTRAL"
+    EARLY_BEAR_BREAKDOWN  = "BEAR"
+    MATURE_BEAR_DECLINE   = "BEAR"
+    BEAR_BOUNCE           = "NEUTRAL"
+    CONSOLIDATION_NARROW  = "NEUTRAL"
+    CONSOLIDATION_WIDE    = "NEUTRAL"
+
 
 class AdvancedRegimeDetector:
     """
-    10-phase market cycle detector using multi-indicator confirmation.
-    Used to adjust signal confidence and position sizing.
+    PHASE 9 — 3-state macro regime classifier.
+    Uses EMA200 on the 1h timeframe.  Simple, robust, hard to mislabel.
     """
-    
+
+    # Deviation thresholds
+    BULL_THRESHOLD    = 0.03   # +3% above EMA200 → BULL
+    BEAR_THRESHOLD    = -0.03  # -3% below EMA200 → BEAR
+
     def __init__(self):
-        self.lookback = 100
-        
+        self.lookback = 200   # EMA period
+
+    # ── Public API (same signature as Phase 8) ─────────────────────────────
+
     def classify_market(self, df: pd.DataFrame) -> MarketPhase:
         """
-        Classifies current data into one of 10 MarketPhase states.
+        Classify market as BULL / BEAR / NEUTRAL using EMA200 deviation.
+        Accepts any OHLCV DataFrame with a 'close' column.
         """
         if df is None or len(df) < 50:
             return MarketPhase.UNKNOWN
-            
-        recent = df.tail(self.lookback).copy()
-        current = recent.iloc[-1]
-        
-        # 1. Indicators (Minimal Logic for speed, assuming indicators pre-calculated or calculated here)
-        rsi = self._compute_rsi(recent['close'].values)
-        adx = self._compute_adx(recent)
-        
-        # Trend Analysis
-        ema20 = recent['close'].ewm(span=20).mean().iloc[-1]
-        ema50 = recent['close'].ewm(span=50).mean().iloc[-1]
-        is_uptrend = ema20 > ema50
-        
-        # Volatility Analysis (Bollinger Band Width)
-        sma20 = recent['close'].rolling(20).mean()
-        std20 = recent['close'].rolling(20).std()
-        bb_upper = sma20 + (2 * std20)
-        bb_lower = sma20 - (2 * std20)
-        # Using the last available values
-        bbw = (bb_upper.iloc[-1] - bb_lower.iloc[-1]) / sma20.iloc[-1] if sma20.iloc[-1] != 0 else 0
-        
-        # 2. Phase Classification Engine
-        if is_uptrend:
-            if adx > 25 and rsi > 55:
-                # Bulls in control
-                if current['close'] > bb_upper.iloc[-2]: 
-                    return MarketPhase.EARLY_BULL_BREAKOUT if adx < 40 else MarketPhase.MATURE_BULL_EXTENSION
-                return MarketPhase.MATURE_BULL_EXTENSION
-            if rsi < 50:
-                return MarketPhase.BULL_CORRECTION
-                
-        else: # Downtrend structure
-            if adx > 25 and rsi < 45:
-                # Bears in control
-                if current['close'] < bb_lower.iloc[-2]:
-                    return MarketPhase.EARLY_BEAR_BREAKDOWN if adx < 40 else MarketPhase.MATURE_BEAR_DECLINE
-                return MarketPhase.MATURE_BEAR_DECLINE
-            if rsi > 50:
-                return MarketPhase.BEAR_BOUNCE
-        
-        # 3. Sideways / Range / Accumulation
-        if bbw < 0.015: # Very tight Bbw
-            return MarketPhase.ACCUMULATION
-        
-        if bbw > 0.04: # Wide Bbw
-            return MarketPhase.CONSOLIDATION_WIDE
-            
-        return MarketPhase.CONSOLIDATION_NARROW
+
+        closes   = df["close"].values
+        ema200   = self._ema(closes, self.lookback)
+        price    = float(closes[-1])
+        deviation = (price - ema200) / ema200
+
+        if deviation > self.BULL_THRESHOLD:
+            return MarketPhase.BULL
+        elif deviation < self.BEAR_THRESHOLD:
+            return MarketPhase.BEAR
+        else:
+            return MarketPhase.NEUTRAL
 
     def get_risk_multiplier(self, phase: MarketPhase) -> float:
         """
-        Returns a multiplier for position size based on current market phase logic.
+        Size multiplier by regime.
+        BULL/BEAR: 1.0 (normal size), NEUTRAL: 0.0 (no new trades).
         """
-        multipliers = {
-            MarketPhase.EARLY_BULL_BREAKOUT:   1.5,
-            MarketPhase.MATURE_BULL_EXTENSION: 1.0,
-            MarketPhase.BULL_CORRECTION:       0.8, # Wait for reversal
-            MarketPhase.ACCUMULATION:          0.4, # Low conviction
-            MarketPhase.DISTRIBUTION:          0.3, # High risk
-            MarketPhase.EARLY_BEAR_BREAKDOWN:  1.2, # Shorting potential
-            MarketPhase.MATURE_BEAR_DECLINE:   0.6, # Cautious shorts
-            MarketPhase.BEAR_BOUNCE:           0.5, # Counter-trend
-            MarketPhase.CONSOLIDATION_NARROW:  0.8,
-            MarketPhase.CONSOLIDATION_WIDE:    0.2, # Avoid chop
-            MarketPhase.UNKNOWN:               0.1
-        }
-        return multipliers.get(phase, 0.1)
+        return {
+            MarketPhase.BULL:    1.0,
+            MarketPhase.BEAR:    1.0,
+            MarketPhase.NEUTRAL: 0.0,
+            MarketPhase.UNKNOWN: 0.0,
+        }.get(phase, 0.0)
 
-    def _compute_rsi(self, prices, period=14):
-        if len(prices) < period: return 50
-        deltas = np.diff(prices)
-        up = deltas[deltas > 0].sum()
-        down = -deltas[deltas < 0].sum()
-        if down == 0: return 100
-        rs = up / (down + 1e-9)
-        return 100 - (100 / (1 + rs))
+    def is_trade_allowed(self, phase: MarketPhase, side: str) -> bool:
+        """
+        Hard gate: returns True only when side aligns with macro regime.
+          BULL   → only BUY allowed
+          BEAR   → only SELL allowed
+          NEUTRAL / UNKNOWN → nothing allowed
+        """
+        if phase == MarketPhase.BULL and side == "BUY":
+            return True
+        if phase == MarketPhase.BEAR and side == "SELL":
+            return True
+        return False
 
-    def _compute_adx(self, df, period=14):
-        # Optimized ADX calculation logic
-        high = df['high']
-        low = df['low']
-        close = df['close']
-        
-        plus_dm = high.diff()
-        minus_dm = low.diff()
-        plus_dm[plus_dm < 0] = 0
-        minus_dm[minus_dm > 0] = 0
-        minus_dm = abs(minus_dm)
-        
-        tr1 = high - low
-        tr2 = abs(high - close.shift())
-        tr3 = abs(low - close.shift())
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        
-        atr = tr.rolling(period).mean()
-        plus_di = 100 * (plus_dm.rolling(period).mean() / (atr + 1e-9))
-        minus_di = 100 * (minus_dm.rolling(period).mean() / (atr + 1e-9))
-        
-        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
-        adx = dx.rolling(period).mean()
-        
-        return adx.iloc[-1] or 20
+    # ── Macro conflict check (used by order engine) ───────────────────────
+
+    @staticmethod
+    def macro_conflict_check(signal_side: str,
+                             btc_close: float,
+                             btc_ema200: float) -> tuple[bool, str]:
+        """
+        Final gate before order submission.
+        Refuses trades that fight the BTC macro trend by more than 5%.
+        Returns (allowed: bool, reason: str).
+        """
+        if btc_ema200 <= 0:
+            return True, "OK (no EMA200 data)"
+
+        deviation = (btc_close - btc_ema200) / btc_ema200
+
+        if signal_side == "SHORT" and deviation > 0.05:
+            return False, f"BLOCKED: shorting while BTC {deviation*100:.1f}%+ above EMA200"
+        if signal_side == "LONG" and deviation < -0.05:
+            return False, f"BLOCKED: longing while BTC {abs(deviation)*100:.1f}%+ below EMA200"
+        return True, "OK"
+
+    # ── Helpers ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _ema(prices: np.ndarray, span: int) -> float:
+        """Compute EMA and return last value."""
+        s = pd.Series(prices, dtype=float)
+        return float(s.ewm(span=span, adjust=False).mean().iloc[-1])
+
+    def compute_ema200(self, df: pd.DataFrame) -> float:
+        """Compute and return the current EMA200 close value."""
+        if df is None or len(df) < 10:
+            return 0.0
+        return self._ema(df["close"].values, self.lookback)

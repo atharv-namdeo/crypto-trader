@@ -1,0 +1,163 @@
+INFO:SovereignBacktest:📂 Loading data from 'backtest_data_bear_2022/'…
+INFO:SovereignBacktest:  ✓ BTC/USDT 1d: 1000 bars
+INFO:SovereignBacktest:  ✓ BTC/USDT 1h: 4000 bars
+INFO:SovereignBacktest:  ✓ BTC/USDT 1m: 133000 bars
+INFO:SovereignBacktest:  ✓ ETH/USDT 1d: 1000 bars
+INFO:SovereignBacktest:  ✓ ETH/USDT 1h: 4000 bars
+INFO:SovereignBacktest:  ✓ ETH/USDT 1m: 133000 bars
+INFO:SovereignBacktest:  ✓ SOL/USDT 1d: 1000 bars
+INFO:SovereignBacktest:  ✓ SOL/USDT 1h: 4000 bars
+INFO:SovereignBacktest:  ✓ SOL/USDT 1m: 133000 bars
+INFO:SovereignBacktest:  ✓ XRP/USDT 1d: 1000 bars
+INFO:SovereignBacktest:  ✓ XRP/USDT 1h: 4000 bars
+INFO:SovereignBacktest:  ✓ XRP/USDT 1m: 133000 bars
+INFO:SovereignBacktest:  ✓ ADA/USDT 1d: 1000 bars
+INFO:SovereignBacktest:  ✓ ADA/USDT 1h: 4000 bars
+INFO:SovereignBacktest:  ✓ ADA/USDT 1m: 133000 bars
+INFO:SovereignBacktest:  ✓ DOGE/USDT 1d: 1000 bars
+INFO:SovereignBacktest:  ✓ DOGE/USDT 1h: 4000 bars
+INFO:SovereignBacktest:  ✓ DOGE/USDT 1m: 133000 bars
+INFO:SovereignBacktest:  ✓ SHIB/USDT 1d: 1000 bars
+INFO:SovereignBacktest:  ✓ SHIB/USDT 1h: 4000 bars
+INFO:SovereignBacktest:  ✓ SHIB/USDT 1m: 133000 bars
+INFO:SovereignBacktest:  ✓ POL/USDT 1d: 608 bars
+INFO:SovereignBacktest:  ✓ POL/USDT 1h: 1000 bars
+INFO:SovereignBacktest:  ✓ POL/USDT 1m: 1000 bars
+INFO:SovereignBacktest:  ✓ AVAX/USDT 1d: 1000 bars
+INFO:SovereignBacktest:  ✓ AVAX/USDT 1h: 4000 bars
+INFO:SovereignBacktest:  ✓ AVAX/USDT 1m: 133000 bars
+INFO:SovereignBacktest:  ✓ LINK/USDT 1d: 1000 bars
+INFO:SovereignBacktest:  ✓ LINK/USDT 1h: 4000 bars
+INFO:SovereignBacktest:  ✓ LINK/USDT 1m: 133000 bars
+INFO:SovereignBacktest:=================================================================
+INFO:SovereignBacktest:🚀 SOVEREIGN BACKTEST 2022-06-01 to 2022-08-31
+INFO:SovereignBacktest:   Capital: $10,000.00  |  Symbols: 10
+INFO:SovereignBacktest:=================================================================
+INFO:SovereignBacktest:📊 Simulation bars: 2208 (1h candles)
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | SHORT | @ 23.8900 | Size: $2500.00 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 40.3200 | Size: $2500.00 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  AVAX/USDT    | STOP_LOSS    | SHORT | PnL: $+82.36 (+3.29%) | Bal: $10,082.36
+INFO:SovereignBacktest:✅ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $+91.61 (+3.66%) | Bal: $10,173.96
+INFO:SovereignBacktest:🚀 ENTRY DOGE/USDT    | SHORT | @ 0.0796 | Size: $2543.49 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY SHIB/USDT    | SHORT | @ 0.0000 | Size: $2543.49 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | SHORT | @ 23.9500 | Size: $1961.89 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  DOGE/USDT    | STOP_LOSS    | SHORT | PnL: $+118.82 (+4.67%) | Bal: $10,292.79
+INFO:SovereignBacktest:✅ EXIT  SHIB/USDT    | STOP_LOSS    | SHORT | PnL: $+91.13 (+3.58%) | Bal: $10,383.92
+INFO:SovereignBacktest:✅ EXIT  AVAX/USDT    | STOP_LOSS    | SHORT | PnL: $+99.68 (+5.08%) | Bal: $10,483.60
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | SHORT | @ 0.3526 | Size: $2620.90 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  XRP/USDT     | TAKE_PROFIT  | SHORT | PnL: $+340.92 (+13.01%) | Bal: $10,824.52
+INFO:SovereignBacktest:🚀 ENTRY DOGE/USDT    | SHORT | @ 0.0558 | Size: $1652.72 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  DOGE/USDT    | STOP_LOSS    | SHORT | PnL: $+4.72 (+0.29%) | Bal: $10,829.25
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | SHORT | @ 15.7200 | Size: $1811.29 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY LINK/USDT    | SHORT | @ 5.8900 | Size: $1243.36 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  AVAX/USDT    | STOP_LOSS    | SHORT | PnL: $+4.81 (+0.27%) | Bal: $10,834.05
+INFO:SovereignBacktest:❌ EXIT  LINK/USDT    | STOP_LOSS    | SHORT | PnL: $-120.45 (-9.69%) | Bal: $10,713.60
+INFO:SovereignBacktest:🚀 ENTRY BTC/USDT     | SHORT | @ 21273.8500 | Size: $2678.40 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY ETH/USDT     | SHORT | @ 1128.1000 | Size: $1993.77 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY ADA/USDT     | SHORT | @ 0.4888 | Size: $2459.58 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  BTC/USDT     | STOP_LOSS    | SHORT | PnL: $+44.66 (+1.67%) | Bal: $10,758.26
+INFO:SovereignBacktest:✅ EXIT  ETH/USDT     | STOP_LOSS    | SHORT | PnL: $+32.41 (+1.63%) | Bal: $10,790.68
+INFO:SovereignBacktest:❌ EXIT  ADA/USDT     | STOP_LOSS    | SHORT | PnL: $-29.59 (-1.20%) | Bal: $10,761.09
+INFO:SovereignBacktest:🚀 ENTRY ADA/USDT     | SHORT | @ 0.4851 | Size: $2690.27 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY SHIB/USDT    | SHORT | @ 0.0000 | Size: $2690.27 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | SHORT | @ 0.3187 | Size: $2690.27 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  XRP/USDT     | STOP_LOSS    | SHORT | PnL: $+82.10 (+3.05%) | Bal: $10,843.19
+INFO:SovereignBacktest:✅ EXIT  ADA/USDT     | STOP_LOSS    | SHORT | PnL: $+76.13 (+2.83%) | Bal: $10,919.32
+INFO:SovereignBacktest:✅ EXIT  SHIB/USDT    | STOP_LOSS    | SHORT | PnL: $+64.73 (+2.41%) | Bal: $10,984.05
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 37.0500 | Size: $2746.01 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $+121.06 (+4.41%) | Bal: $11,105.11
+INFO:SovereignBacktest:🚀 ENTRY SHIB/USDT    | SHORT | @ 0.0000 | Size: $2009.95 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | SHORT | @ 16.2200 | Size: $2168.69 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | SHORT | @ 0.3156 | Size: $2395.37 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  AVAX/USDT    | STOP_LOSS    | SHORT | PnL: $-138.95 (-6.41%) | Bal: $10,966.16
+INFO:SovereignBacktest:❌ EXIT  SHIB/USDT    | STOP_LOSS    | SHORT | PnL: $-121.49 (-6.04%) | Bal: $10,844.67
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | SHORT | @ 16.7500 | Size: $2711.17 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  AVAX/USDT    | STOP_LOSS    | SHORT | PnL: $-176.45 (-6.51%) | Bal: $10,668.22
+INFO:SovereignBacktest:❌ EXIT  XRP/USDT     | STOP_LOSS    | SHORT | PnL: $-127.27 (-5.31%) | Bal: $10,540.95
+INFO:SovereignBacktest:🚀 ENTRY LINK/USDT    | SHORT | @ 6.1000 | Size: $2635.24 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY BTC/USDT     | SHORT | @ 19165.0100 | Size: $2635.24 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY ETH/USDT     | SHORT | @ 1029.2800 | Size: $2635.24 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  ETH/USDT     | STOP_LOSS    | SHORT | PnL: $-99.93 (-3.79%) | Bal: $10,441.02
+INFO:SovereignBacktest:✅ EXIT  LINK/USDT    | STOP_LOSS    | SHORT | PnL: $+48.83 (+1.85%) | Bal: $10,489.84
+INFO:SovereignBacktest:❌ EXIT  BTC/USDT     | STOP_LOSS    | SHORT | PnL: $-68.93 (-2.62%) | Bal: $10,420.92
+INFO:SovereignBacktest:🚀 ENTRY DOGE/USDT    | SHORT | @ 0.0600 | Size: $2605.23 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY SHIB/USDT    | SHORT | @ 0.0000 | Size: $2605.23 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 33.8400 | Size: $2605.23 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $-106.31 (-4.08%) | Bal: $10,314.60
+INFO:SovereignBacktest:❌ EXIT  DOGE/USDT    | STOP_LOSS    | SHORT | PnL: $-52.47 (-2.01%) | Bal: $10,262.14
+INFO:SovereignBacktest:❌ EXIT  SHIB/USDT    | STOP_LOSS    | SHORT | PnL: $-108.90 (-4.18%) | Bal: $10,153.24
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 39.0500 | Size: $2538.31 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  SOL/USDT     | TAKE_PROFIT  | SHORT | PnL: $+258.69 (+10.19%) | Bal: $10,411.92
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | SHORT | @ 0.3310 | Size: $2602.98 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  XRP/USDT     | STOP_LOSS    | SHORT | PnL: $-54.23 (-2.08%) | Bal: $10,357.70
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 39.7900 | Size: $2589.42 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | SHORT | @ 22.4200 | Size: $2589.42 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $+50.00 (+1.93%) | Bal: $10,407.70
+INFO:SovereignBacktest:❌ EXIT  AVAX/USDT    | STOP_LOSS    | SHORT | PnL: $-117.85 (-4.55%) | Bal: $10,289.85
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 38.7900 | Size: $2572.46 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $-91.51 (-3.56%) | Bal: $10,198.35
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 39.3900 | Size: $2549.59 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $-52.49 (-2.06%) | Bal: $10,145.86
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | SHORT | @ 27.3700 | Size: $2536.46 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  AVAX/USDT    | STOP_LOSS    | SHORT | PnL: $+88.11 (+3.47%) | Bal: $10,233.97
+INFO:SovereignBacktest:🚀 ENTRY ETH/USDT     | SHORT | @ 1825.9900 | Size: $2558.49 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  ETH/USDT     | TAKE_PROFIT  | SHORT | PnL: $+161.10 (+6.30%) | Bal: $10,395.06
+INFO:SovereignBacktest:🚀 ENTRY SHIB/USDT    | SHORT | @ 0.0000 | Size: $2598.77 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  SHIB/USDT    | STOP_LOSS    | SHORT | PnL: $+73.72 (+2.84%) | Bal: $10,468.78
+INFO:SovereignBacktest:🚀 ENTRY DOGE/USDT    | SHORT | @ 0.0687 | Size: $2617.19 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY ETH/USDT     | SHORT | @ 1594.9500 | Size: $2617.19 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | SHORT | @ 0.3370 | Size: $2617.19 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  DOGE/USDT    | STOP_LOSS    | SHORT | PnL: $+66.20 (+2.53%) | Bal: $10,534.98
+INFO:SovereignBacktest:❌ EXIT  XRP/USDT     | STOP_LOSS    | SHORT | PnL: $-59.07 (-2.26%) | Bal: $10,475.90
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 34.2700 | Size: $2618.98 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | SHORT | @ 0.3336 | Size: $2618.98 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $-78.08 (-2.98%) | Bal: $10,397.82
+INFO:SovereignBacktest:❌ EXIT  XRP/USDT     | STOP_LOSS    | SHORT | PnL: $-52.60 (-2.01%) | Bal: $10,345.22
+INFO:SovereignBacktest:❌ EXIT  ETH/USDT     | STOP_LOSS    | SHORT | PnL: $-72.25 (-2.76%) | Bal: $10,272.97
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 34.8800 | Size: $2568.24 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY DOGE/USDT    | SHORT | @ 0.0674 | Size: $2568.24 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY BTC/USDT     | SHORT | @ 21200.0600 | Size: $2568.24 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  BTC/USDT     | STOP_LOSS    | SHORT | PnL: $-55.31 (-2.15%) | Bal: $10,217.66
+INFO:SovereignBacktest:❌ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $-90.77 (-3.53%) | Bal: $10,126.89
+INFO:SovereignBacktest:❌ EXIT  DOGE/USDT    | STOP_LOSS    | SHORT | PnL: $-63.71 (-2.48%) | Bal: $10,063.18
+INFO:SovereignBacktest:🚀 ENTRY SHIB/USDT    | SHORT | @ 0.0000 | Size: $2515.79 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 35.2300 | Size: $2515.79 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY ADA/USDT     | SHORT | @ 0.4591 | Size: $2515.79 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $-69.51 (-2.76%) | Bal: $9,993.67
+INFO:SovereignBacktest:❌ EXIT  ADA/USDT     | STOP_LOSS    | SHORT | PnL: $-56.04 (-2.23%) | Bal: $9,937.63
+INFO:SovereignBacktest:❌ EXIT  SHIB/USDT    | STOP_LOSS    | SHORT | PnL: $-50.76 (-2.02%) | Bal: $9,886.87
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | SHORT | @ 22.8900 | Size: $2471.72 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY DOGE/USDT    | SHORT | @ 0.0684 | Size: $2471.72 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 35.2800 | Size: $2471.72 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  SOL/USDT     | TAKE_PROFIT  | SHORT | PnL: $+159.49 (+6.45%) | Bal: $10,046.36
+INFO:SovereignBacktest:✅ EXIT  AVAX/USDT    | TAKE_PROFIT  | SHORT | PnL: $+147.81 (+5.98%) | Bal: $10,194.17
+INFO:SovereignBacktest:✅ EXIT  DOGE/USDT    | TAKE_PROFIT  | SHORT | PnL: $+187.10 (+7.57%) | Bal: $10,381.27
+INFO:SovereignBacktest:🚀 ENTRY SHIB/USDT    | SHORT | @ 0.0000 | Size: $2595.32 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY LINK/USDT    | SHORT | @ 6.5050 | Size: $2595.32 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | SHORT | @ 31.3000 | Size: $2595.32 | Regime: BEAR
+INFO:SovereignBacktest:✅ EXIT  SOL/USDT     | STOP_LOSS    | SHORT | PnL: $+58.35 (+2.25%) | Bal: $10,439.61
+INFO:SovereignBacktest:✅ EXIT  LINK/USDT    | STOP_LOSS    | SHORT | PnL: $+71.93 (+2.77%) | Bal: $10,511.54
+INFO:SovereignBacktest:✅ EXIT  SHIB/USDT    | STOP_LOSS    | SHORT | PnL: $+35.68 (+1.37%) | Bal: $10,547.22
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | SHORT | @ 0.3241 | Size: $2636.81 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY BTC/USDT     | SHORT | @ 19756.2400 | Size: $2636.81 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY SHIB/USDT    | SHORT | @ 0.0000 | Size: $2636.81 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  BTC/USDT     | STOP_LOSS    | SHORT | PnL: $-68.81 (-2.61%) | Bal: $10,478.41
+INFO:SovereignBacktest:❌ EXIT  XRP/USDT     | STOP_LOSS    | SHORT | PnL: $-56.82 (-2.15%) | Bal: $10,421.59
+INFO:SovereignBacktest:❌ EXIT  SHIB/USDT    | STOP_LOSS    | SHORT | PnL: $-71.86 (-2.73%) | Bal: $10,349.74
+INFO:SovereignBacktest:🚀 ENTRY SHIB/USDT    | SHORT | @ 0.0000 | Size: $2587.43 | Regime: BEAR
+INFO:SovereignBacktest:
+📌 Force-closing 1 open positions at end of period…
+INFO:SovereignBacktest:📌 CLOSED SHIB/USDT at period end | PnL: $+16.55
+INFO:SovereignBacktest:
+=================================================================
+INFO:SovereignBacktest:📊 Generating Sovereign Backtest Report…
+INFO:SovereignBacktest:
+✅ Report: backtest_results_bear_2022.md
+INFO:SovereignBacktest:✅ Equity curve: backtest_results_bear_2022_equity.csv
+INFO:SovereignBacktest:
+=================================================================
+INFO:SovereignBacktest:  Net P&L : $+366.29  (+3.66%)
+INFO:SovereignBacktest:  Win Rate: 50.0%
+INFO:SovereignBacktest:  Sharpe  : 0.90
+INFO:SovereignBacktest:  Max DD  : 10.97%
+INFO:SovereignBacktest:=================================================================

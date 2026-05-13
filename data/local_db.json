@@ -36,156 +36,156 @@
         "prices": {
             "ALGO": {
                 "USDT": {
-                    "current_price": 0.1141,
+                    "current_price": 0.1119,
                     "confidence": 0,
-                    "timestamp": 18579062
+                    "timestamp": 56708937
                 }
             },
             "ARB": {
                 "USDT": {
-                    "current_price": 0.0946,
+                    "current_price": 0.097,
                     "confidence": 0,
-                    "timestamp": 1775537828584
+                    "timestamp": 1775622659086
                 }
             },
             "NEAR": {
                 "USDT": {
-                    "current_price": 1.239,
+                    "current_price": 1.267,
                     "confidence": 0,
-                    "timestamp": 1775537828500
+                    "timestamp": 1775622658943
                 }
             },
             "LTC": {
                 "USDT": {
-                    "current_price": 53.3,
+                    "current_price": 53.73,
                     "confidence": 0,
-                    "timestamp": 1775537828516
+                    "timestamp": 1775622658948
                 }
             },
             "ADA": {
                 "USDT": {
-                    "current_price": 0.2426,
+                    "current_price": 0.246,
                     "confidence": 0,
-                    "timestamp": 1775537828413
+                    "timestamp": 1775622661244
                 }
             },
             "BTC": {
                 "USDT": {
-                    "current_price": 68931.8,
+                    "current_price": 69293.1,
                     "confidence": 0,
-                    "timestamp": 1775537828380
+                    "timestamp": 1775622661154
                 }
             },
             "BCH": {
                 "USDT": {
-                    "current_price": 432.81,
+                    "current_price": 437.23,
                     "confidence": 0,
-                    "timestamp": 1775537828497
+                    "timestamp": 1775622658921
                 }
             },
             "DOGE": {
                 "USDT": {
-                    "current_price": 0.09046,
+                    "current_price": 0.09211,
                     "confidence": 0,
-                    "timestamp": 1775537828422
+                    "timestamp": 1775622661268
                 }
             },
             "POL": {
                 "USDT": {
-                    "current_price": 0.09019,
+                    "current_price": 0.0897,
                     "confidence": 0,
-                    "timestamp": 1775537828432
+                    "timestamp": 1775622661316
                 }
             },
             "SOL": {
                 "USDT": {
-                    "current_price": 79.95,
+                    "current_price": 82.0,
                     "confidence": 0,
-                    "timestamp": 1775537828394
+                    "timestamp": 1775622661192
                 }
             },
             "TON": {
                 "USDT": {
-                    "current_price": 1.2284,
+                    "current_price": 1.2225,
                     "confidence": 0,
-                    "timestamp": 18582531
+                    "timestamp": 57123765
                 }
             },
             "ETH": {
                 "USDT": {
-                    "current_price": 2110.86,
+                    "current_price": 2116.89,
                     "confidence": 0,
-                    "timestamp": 1775537828384
+                    "timestamp": 1775622661165
                 }
             },
             "FIL": {
                 "USDT": {
-                    "current_price": 0.864,
+                    "current_price": 0.873,
                     "confidence": 0,
-                    "timestamp": 18583359
+                    "timestamp": 57122296
                 }
             },
             "AVAX": {
                 "USDT": {
-                    "current_price": 8.68,
+                    "current_price": 8.755,
                     "confidence": 0,
-                    "timestamp": 1775537828450
+                    "timestamp": 1775622658770
                 }
             },
             "DOT": {
                 "USDT": {
                     "current_price": 1.231,
                     "confidence": 0,
-                    "timestamp": 1775537828487
+                    "timestamp": 1775622658879
                 }
             },
             "UNI": {
                 "USDT": {
-                    "current_price": 3.068,
+                    "current_price": 3.116,
                     "confidence": 0,
-                    "timestamp": 1775537828474
+                    "timestamp": 1775622658853
                 }
             },
             "XLM": {
                 "USDT": {
-                    "current_price": 0.15589,
+                    "current_price": 0.15545,
                     "confidence": 0,
-                    "timestamp": 1775537828531
+                    "timestamp": 1775622658983
                 }
             },
             "OP": {
                 "USDT": {
-                    "current_price": 0.1091,
+                    "current_price": 0.1116,
                     "confidence": 0,
-                    "timestamp": 1775537828602
+                    "timestamp": 1775622659111
                 }
             },
             "ATOM": {
                 "USDT": {
-                    "current_price": 1.678,
+                    "current_price": 1.719,
                     "confidence": 0,
-                    "timestamp": 1775537828548
+                    "timestamp": 1775622659029
                 }
             },
             "XRP": {
                 "USDT": {
-                    "current_price": 1.312,
+                    "current_price": 1.3181,
                     "confidence": 0,
-                    "timestamp": 1775537828404
+                    "timestamp": 1775622661219
                 }
             },
             "HBAR": {
                 "USDT": {
-                    "current_price": 0.08689,
+                    "current_price": 0.08705,
                     "confidence": 0,
-                    "timestamp": 1775537828564
+                    "timestamp": 1775622659050
                 }
             },
             "LINK": {
                 "USDT": {
-                    "current_price": 8.788,
+                    "current_price": 8.734,
                     "confidence": 0,
-                    "timestamp": 1775537828462
+                    "timestamp": 1775622658812
                 }
             }
         }

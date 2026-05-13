@@ -24,7 +24,7 @@ def fetch_symbol_data(exchange, symbol, timeframe, days=7, start_date=None, data
     
     end_time = since + (days * 24 * 60 * 60 * 1000)
 
-    print(f"📥 Fetching {symbol} {timeframe} since {datetime.fromtimestamp(since/1000)}...")
+    print(f"FETCHING {symbol} {timeframe} since {datetime.fromtimestamp(since/1000)}...")
     
     all_ohlcv = []
     current_since = since
@@ -45,15 +45,15 @@ def fetch_symbol_data(exchange, symbol, timeframe, days=7, start_date=None, data
             current_since = ohlcv[-1][0] + 1
             time.sleep(exchange.rateLimit / 1000)
         except Exception as e:
-            print(f"❌ Error fetching {symbol}: {e}")
+            print(f"ERROR fetching {symbol}: {e}")
             break
             
     if all_ohlcv:
         df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df.to_csv(filename, index=False)
-        print(f"💾 Saved {len(df)} rows for {symbol} {timeframe} to {filename}")
+        print(f"SAVED {len(df)} rows for {symbol} {timeframe} to {filename}")
     else:
-        print(f"⚠️ No data recovered for {symbol}")
+        print(f"WARNING: No data recovered for {symbol}")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -62,6 +62,7 @@ def main():
     parser.add_argument("--dir", type=str, help="Output directory", default="backtest_data")
     parser.add_argument("--tier", type=str, help="Symbol tier (top/mid/all)", default="top")
     parser.add_argument("--symbols", type=str, help="Comma-separated symbols", default=None)
+    parser.add_argument("--timeframes", type=str, help="Comma-separated timeframes", default="1h,1m,1d")
     args = parser.parse_args()
 
     exchange = ccxt.binance({'enableRateLimit': True})
@@ -77,13 +78,12 @@ def main():
         symbols = []
         for t in SYMBOL_CONFIG: symbols.extend(SYMBOL_CONFIG[t])
         
-    print(f"🚀 Starting SYNC data fetch into {args.dir}...")
-    
+    timeframes = args.timeframes.split(',')
     for symbol in symbols:
-        fetch_symbol_data(exchange, symbol, '1h', args.days, args.start, args.dir)
-        fetch_symbol_data(exchange, symbol, '1m', args.days, args.start, args.dir)
+        for tf in timeframes:
+            fetch_symbol_data(exchange, symbol, tf, args.days, args.start, args.dir)
         
-    print("✨ ALL DATA FETCHED")
+    print("SUCCESS: ALL DATA FETCHED")
 
 if __name__ == "__main__":
     main()

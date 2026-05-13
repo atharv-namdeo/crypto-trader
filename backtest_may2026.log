@@ -1,0 +1,99 @@
+INFO:SovereignBacktest:📂 Loading data from 'backtest_data_may2026'…
+INFO:SovereignBacktest:  ✓ BTC/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ BTC/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ BTC/USDT 1m: 43692 bars
+INFO:SovereignBacktest:  ✓ ETH/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ ETH/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ ETH/USDT 1m: 43692 bars
+INFO:SovereignBacktest:  ✓ SOL/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ SOL/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ SOL/USDT 1m: 43693 bars
+INFO:SovereignBacktest:  ✓ XRP/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ XRP/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ XRP/USDT 1m: 43693 bars
+INFO:SovereignBacktest:  ✓ ADA/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ ADA/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ ADA/USDT 1m: 43693 bars
+INFO:SovereignBacktest:  ✓ DOGE/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ DOGE/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ DOGE/USDT 1m: 43693 bars
+INFO:SovereignBacktest:  ✓ SHIB/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ SHIB/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ SHIB/USDT 1m: 43694 bars
+INFO:SovereignBacktest:  ✓ POL/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ POL/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ POL/USDT 1m: 43694 bars
+INFO:SovereignBacktest:  ✓ AVAX/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ AVAX/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ AVAX/USDT 1m: 43694 bars
+INFO:SovereignBacktest:  ✓ LINK/USDT 1d: 331 bars
+INFO:SovereignBacktest:  ✓ LINK/USDT 1h: 2169 bars
+INFO:SovereignBacktest:  ✓ LINK/USDT 1m: 43694 bars
+INFO:SovereignBacktest:=================================================================
+INFO:SovereignBacktest:🚀 SOVEREIGN BACKTEST  Apr 13 → May 13, 2026
+INFO:SovereignBacktest:   Capital: $10,000.00  |  Symbols: 10
+INFO:SovereignBacktest:=================================================================
+INFO:SovereignBacktest:📊 Simulation bars: 729 (1h candles)
+INFO:SovereignBacktest:🚀 ENTRY BTC/USDT     | LONG  | @ 72400.1500 | Size: $3000.00 | Regime: BULL
+INFO:SovereignBacktest:🚀 ENTRY ETH/USDT     | LONG  | @ 2234.1800 | Size: $3000.00 | Regime: BULL
+INFO:SovereignBacktest:✅ EXIT  BTC/USDT     | TAKE_PROFIT  | LONG  | PnL: $+86.87 (+2.90%) | Bal: $10,086.87
+INFO:SovereignBacktest:✅ EXIT  ETH/USDT     | TAKE_PROFIT  | LONG  | PnL: $+153.80 (+5.13%) | Bal: $10,240.67
+INFO:SovereignBacktest:🚀 ENTRY ADA/USDT     | SHORT | @ 0.2404 | Size: $3072.20 | Regime: BEAR
+INFO:SovereignBacktest:🚀 ENTRY ETH/USDT     | LONG  | @ 2338.4000 | Size: $3072.20 | Regime: BULL
+INFO:SovereignBacktest:❌ EXIT  ADA/USDT     | STOP_LOSS    | SHORT | PnL: $-80.93 (-2.63%) | Bal: $10,159.74
+INFO:SovereignBacktest:🚀 ENTRY BTC/USDT     | LONG  | @ 75002.6000 | Size: $3047.92 | Regime: BULL
+INFO:SovereignBacktest:❌ EXIT  BTC/USDT     | STOP_LOSS    | LONG  | PnL: $-54.84 (-1.80%) | Bal: $10,104.90
+INFO:SovereignBacktest:✅ EXIT  ETH/USDT     | TAKE_PROFIT  | LONG  | PnL: $+124.08 (+4.04%) | Bal: $10,228.98
+INFO:SovereignBacktest:🚀 ENTRY POL/USDT     | LONG  | @ 0.0903 | Size: $3068.69 | Regime: BULL
+INFO:SovereignBacktest:✅ EXIT  POL/USDT     | TAKE_PROFIT  | LONG  | PnL: $+140.60 (+4.58%) | Bal: $10,369.58
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | LONG  | @ 1.4487 | Size: $3110.87 | Regime: BULL
+INFO:SovereignBacktest:❌ EXIT  XRP/USDT     | STOP_LOSS    | LONG  | PnL: $-54.56 (-1.75%) | Bal: $10,315.02
+INFO:SovereignBacktest:🚀 ENTRY BTC/USDT     | LONG  | @ 78257.4800 | Size: $3094.51 | Regime: BULL
+INFO:SovereignBacktest:❌ EXIT  BTC/USDT     | STOP_LOSS    | LONG  | PnL: $-63.48 (-2.05%) | Bal: $10,251.55
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | SHORT | @ 1.3723 | Size: $3075.46 | Regime: BEAR
+INFO:SovereignBacktest:❌ EXIT  XRP/USDT     | STOP_LOSS    | SHORT | PnL: $-64.03 (-2.08%) | Bal: $10,187.52
+INFO:SovereignBacktest:🚀 ENTRY DOGE/USDT    | LONG  | @ 0.1090 | Size: $3056.26 | Regime: BULL
+INFO:SovereignBacktest:❌ EXIT  DOGE/USDT    | STOP_LOSS    | LONG  | PnL: $-43.35 (-1.42%) | Bal: $10,144.17
+INFO:SovereignBacktest:🚀 ENTRY DOGE/USDT    | LONG  | @ 0.1088 | Size: $3043.25 | Regime: BULL
+INFO:SovereignBacktest:✅ EXIT  DOGE/USDT    | TAKE_PROFIT  | LONG  | PnL: $+98.56 (+3.24%) | Bal: $10,242.73
+INFO:SovereignBacktest:🚀 ENTRY BTC/USDT     | LONG  | @ 80216.1600 | Size: $3072.82 | Regime: BULL
+INFO:SovereignBacktest:🚀 ENTRY POL/USDT     | LONG  | @ 0.0976 | Size: $3072.82 | Regime: BULL
+INFO:SovereignBacktest:🚀 ENTRY ETH/USDT     | LONG  | @ 2376.8000 | Size: $3072.82 | Regime: BULL
+INFO:SovereignBacktest:❌ EXIT  ETH/USDT     | STOP_LOSS    | LONG  | PnL: $-46.64 (-1.52%) | Bal: $10,196.09
+INFO:SovereignBacktest:🚀 ENTRY LINK/USDT    | LONG  | @ 10.0100 | Size: $3058.83 | Regime: BULL
+INFO:SovereignBacktest:🚀 ENTRY ADA/USDT     | LONG  | @ 0.2676 | Size: $3058.83 | Regime: BULL
+INFO:SovereignBacktest:❌ EXIT  ADA/USDT     | STOP_LOSS    | LONG  | PnL: $-71.80 (-2.35%) | Bal: $10,124.29
+INFO:SovereignBacktest:❌ EXIT  LINK/USDT    | STOP_LOSS    | LONG  | PnL: $-63.57 (-2.08%) | Bal: $10,060.72
+INFO:SovereignBacktest:✅ EXIT  POL/USDT     | TAKE_PROFIT  | LONG  | PnL: $+142.44 (+4.64%) | Bal: $10,203.16
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | LONG  | @ 9.5600 | Size: $3060.95 | Regime: BULL
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | LONG  | @ 88.4600 | Size: $3060.95 | Regime: BULL
+INFO:SovereignBacktest:🚀 ENTRY ADA/USDT     | LONG  | @ 0.2641 | Size: $3060.95 | Regime: BULL
+INFO:SovereignBacktest:✅ EXIT  SOL/USDT     | TAKE_PROFIT  | LONG  | PnL: $+104.87 (+3.43%) | Bal: $10,308.04
+INFO:SovereignBacktest:✅ EXIT  ADA/USDT     | TAKE_PROFIT  | LONG  | PnL: $+73.30 (+2.39%) | Bal: $10,381.34
+INFO:SovereignBacktest:✅ EXIT  AVAX/USDT    | TAKE_PROFIT  | LONG  | PnL: $+103.35 (+3.38%) | Bal: $10,484.69
+INFO:SovereignBacktest:🚀 ENTRY AVAX/USDT    | LONG  | @ 10.1500 | Size: $3145.41 | Regime: BULL
+INFO:SovereignBacktest:🚀 ENTRY LINK/USDT    | LONG  | @ 10.6300 | Size: $3145.41 | Regime: BULL
+INFO:SovereignBacktest:❌ EXIT  LINK/USDT    | STOP_LOSS    | LONG  | PnL: $-79.64 (-2.53%) | Bal: $10,405.06
+INFO:SovereignBacktest:❌ EXIT  AVAX/USDT    | STOP_LOSS    | LONG  | PnL: $-95.53 (-3.04%) | Bal: $10,309.52
+INFO:SovereignBacktest:🚀 ENTRY LINK/USDT    | LONG  | @ 10.4600 | Size: $3092.86 | Regime: BULL
+INFO:SovereignBacktest:🚀 ENTRY XRP/USDT     | LONG  | @ 1.4624 | Size: $3092.86 | Regime: BULL
+INFO:SovereignBacktest:🚀 ENTRY SOL/USDT     | LONG  | @ 95.2000 | Size: $3092.86 | Regime: BULL
+INFO:SovereignBacktest:
+📌 Force-closing 4 open positions at end of period…
+INFO:SovereignBacktest:📌 CLOSED BTC/USDT at period end | PnL: $+24.69
+INFO:SovereignBacktest:📌 CLOSED LINK/USDT at period end | PnL: $+18.09
+INFO:SovereignBacktest:📌 CLOSED XRP/USDT at period end | PnL: $-8.32
+INFO:SovereignBacktest:📌 CLOSED SOL/USDT at period end | PnL: $-5.57
+INFO:SovereignBacktest:
+=================================================================
+INFO:SovereignBacktest:📊 Generating Sovereign Backtest Report…
+INFO:SovereignBacktest:
+✅ Report: backtest_results_may2026.md
+INFO:SovereignBacktest:✅ Equity curve: equity_curve_may2026.csv
+INFO:SovereignBacktest:
+=================================================================
+INFO:SovereignBacktest:  Net P&L : $+338.42  (+3.38%)
+INFO:SovereignBacktest:  Win Rate: 45.8%
+INFO:SovereignBacktest:  Sharpe  : 2.40
+INFO:SovereignBacktest:  Max DD  : 2.98%
+INFO:SovereignBacktest:=================================================================

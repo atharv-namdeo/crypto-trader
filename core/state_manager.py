@@ -265,10 +265,30 @@ class StateManager:
             log.error(f"Redis debug_keys error: {e}")
 
 class MemoryMock:
-    """Mock Redis for local testing without server."""
-    def __init__(self): self.storage = {}
+    """Mock Redis with Disk Persistence for local laptop setup."""
+    def __init__(self, filename="local_state.json"): 
+        self.filename = filename
+        self.storage = self._load()
+    
+    def _load(self):
+        if os.path.exists(self.filename):
+            try:
+                with open(self.filename, 'r') as f:
+                    return json.load(f)
+            except: return {}
+        return {}
+
+    def _save(self):
+        try:
+            with open(self.filename, 'w') as f:
+                json.dump(self.storage, f)
+        except Exception as e:
+            log.error(f"Error saving local state: {e}")
+
     async def get(self, k): return self.storage.get(k)
-    async def set(self, k, v, ex=None): self.storage[k] = v
+    async def set(self, k, v, ex=None): 
+        self.storage[k] = v
+        self._save()
     async def exists(self, k): return k in self.storage
     async def keys(self, p):
         clean_p = p.replace('*', '')
@@ -276,17 +296,20 @@ class MemoryMock:
     async def delete(self, *keys): 
         for k in keys:
             if k in self.storage: del self.storage[k]
+        self._save()
     async def lpush(self, k, v):
         if k not in self.storage: self.storage[k] = []
         self.storage[k].insert(0, v)
+        self._save()
     async def lrange(self, k, s, e): return self.storage.get(k, [])[s:e+1]
     async def llen(self, k): return len(self.storage.get(k, []))
-    async def ltrim(self, k, s, e): self.storage[k] = self.storage.get(k, [])[s:e+1]
+    async def ltrim(self, k, s, e): 
+        self.storage[k] = self.storage.get(k, [])[s:e+1]
+        self._save()
     async def ping(self): return True
-    async def close(self): pass
+    async def close(self): self._save()
     def pipeline(self): return self
     async def execute(self): return []
-    async def exists(self, k): return k in self.storage
     async def publish(self, c, m): pass
     def pubsub(self): return self
     async def subscribe(self, c): pass

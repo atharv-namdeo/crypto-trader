@@ -16,3 +16,9 @@ backtest_results/*.csv
 backtest_results/*.log
 backtest_results/*.png
 backtest_results/*.webp
+# Local Live Data
+local_state.json
+heartbeat.json
+backtest_data_*/
+backtest_results_*.md
+backtest_results_*.csv
