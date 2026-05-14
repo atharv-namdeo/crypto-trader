@@ -37,13 +37,19 @@ engine = None
 async def get_status():
     balance = await state.get_float("portfolio:balance") or 10000.0
     positions = await state.get_all_positions()
+    signals = {}
+    for s in ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT', 'DOGE/USDT', 'SHIB/USDT', 'AVAX/USDT', 'LINK/USDT']:
+        sig = await state.firebase.get(f"trading/signals/{s}")
+        if sig: signals[s] = sig
+
     return {
         "status": "Running",
         "phase": "Phase 11: Omega Brain",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "balance": balance,
         "active_trades": len(positions),
-        "positions": positions
+        "positions": positions,
+        "signals": signals
     }
 
 @app.get("/history")

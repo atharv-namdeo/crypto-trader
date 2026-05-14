@@ -34,6 +34,7 @@ from core.strategies.library.rsi_reversion import RSIReversionStrategy
 from core.strategies.library.vce_coil import VCEStrategy
 from core.strategies.library.mdt_trail import MDTStrategy
 from core.strategies.library.pee_pulse import PEEStrategy
+from core.strategies.library.technical_indicators import TechnicalStrategies
 
 log = logging.getLogger("EnsembleAlgorithm")
 
@@ -78,6 +79,15 @@ class EnsembleAlgorithm:
             mdt_sig      = MDTStrategy.generate(ohlcv_1h)
             pulse_sig    = PEEStrategy.generate(ohlcv_1h)
 
+            # --- RESTORING 20+ LEGACY STRATEGIES (DYNAMIC LOAD) ---
+            legacy_signals = {}
+            for name in dir(TechnicalStrategies):
+                if not name.startswith("__") and callable(getattr(TechnicalStrategies, name)):
+                    try:
+                        legacy_signals[name] = getattr(TechnicalStrategies, name)(ohlcv_1h)
+                    except Exception as e:
+                        log.error(f"Error running legacy strategy {name}: {e}")
+
             # Early return for NEUTRAL / UNKNOWN (with full vote transparency)
             if phase in (MarketPhase.NEUTRAL, MarketPhase.UNKNOWN):
                 buy_votes  = sum([momentum_sig["action"] == "BUY", rsi_sig["action"] == "BUY", vce_sig["action"] == "BUY", mdt_sig["action"] == "BUY", pulse_sig["action"] == "BUY"])
@@ -104,13 +114,21 @@ class EnsembleAlgorithm:
             profile = self._get_asset_profile(symbol)
             weights = self._get_adaptive_weights(state, profile, phase)
 
+            # Compute legacy score contribution (equal weight for legacy block)
+            legacy_scores = [s["score"] for s in legacy_signals.values()]
+            avg_legacy_score = sum(legacy_scores) / len(legacy_scores) if legacy_scores else 0.5
+
             base_score = (
                 momentum_sig["score"] * weights["MOM"] +
                 rsi_sig["score"]      * weights["RSI"] +
                 vce_sig["score"]      * weights["VCE"] +
                 mdt_sig["score"]      * weights["MDT"] +
-                pulse_sig["score"]    * weights["PEE"]
+                pulse_sig["score"]    * weights["PEE"] +
+                avg_legacy_score      * 0.2 # Legacy block contribution
             )
+            
+            # Re-normalize total score
+            base_score = base_score / (sum(weights.values()) + 0.2)
 
             # 7. Zone / pullback confirmation
             z_filter     = ZoneTradeFilter(self.zone_engine)
@@ -192,6 +210,8 @@ class EnsembleAlgorithm:
                 "rsi":          float(rsi_1h),
                 "ema20":        ema20,
                 "ema50":        ema50,
+                "price":        price,
+                "ema200":       btc_ema200,
                 "buy_votes":    buy_votes,
                 "sell_votes":   sell_votes,
                 "confirmed_b":  confirmed_b,

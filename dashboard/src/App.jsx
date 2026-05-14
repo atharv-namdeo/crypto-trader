@@ -64,8 +64,30 @@ function App() {
   );
 
   const balance = status?.balance || 10000.0;
-  const dayPnl = 338.42; // Placeholder for demo
+  
+  // REAL METRICS CALCULATION
+  const closedTrades = history || [];
+  const wins = closedTrades.filter(t => t.pnl > 0).length;
+  const winRate = closedTrades.length > 0 ? (wins / closedTrades.length * 100).toFixed(1) : "0.0";
+  
+  const todayStart = new Date().setHours(0,0,0,0);
+  const todayTrades = closedTrades.filter(t => t.closed_at > todayStart);
+  const btcSig = status?.signals?.['BTC/USDT'] || {};
+  const btcPrice = btcSig.price || 0;
+  const ema200 = btcSig.ema200 || 0;
+  const dev200 = btcPrice && ema200 ? ((btcPrice - ema200) / ema200 * 100).toFixed(1) : "0.0";
+  const rsi = btcSig.rsi || 50.0;
+  const atr = btcSig.atr || 0.0;
+
+  const todayPnl = todayTrades.reduce((a, t) => a + (t.pnl || 0), 0);
+  const todayPnlPct = (todayPnl / balance * 100).toFixed(2);
+
   const openPnl = Object.values(status?.positions || {}).reduce((a, p) => a + (p.pnl || 0), 0);
+  
+  // Sharpe Approximation
+  const returns = closedTrades.map(t => t.pnl_pct || 0);
+  const avgReturn = returns.length > 0 ? returns.reduce((a,b)=>a+b,0)/returns.length : 0;
+  const sharpe = returns.length > 1 ? (avgReturn / (Math.sqrt(returns.reduce((a,b)=>a+(b-avgReturn)**2,0)/returns.length) || 1) * Math.sqrt(365)).toFixed(2) : "0.00";
 
   return (
     <div style={{ background: 'var(--bg0)', minHeight: '100vh' }}>
@@ -83,10 +105,10 @@ function App() {
         <div className="logo">ACE<span>/</span>TRADER <span style={{ color: 'var(--text2)', fontWeight: 300 }}>{status?.phase || "PHASE 11"}</span></div>
         <div className="topbar-center">
           <StatChip label="Balance" value={`$${balance.toLocaleString()}`} />
-          <StatChip label="Today P&L" value={`+$${dayPnl.toFixed(2)} (+3.38%)`} className="pos" />
+          <StatChip label="Today P&L" value={`${todayPnl >= 0 ? '+' : ''}$${todayPnl.toFixed(2)} (${todayPnlPct}%)`} className={todayPnl >= 0 ? 'pos' : 'neg'} />
           <StatChip label="Open P&L" value={`$${openPnl >= 0 ? '+' : ''}${openPnl.toFixed(2)}`} className={openPnl >= 0 ? 'pos' : 'neg'} />
-          <StatChip label="Win Rate" value="45.8%" />
-          <StatChip label="Sharpe" value="2.40" className="pos" />
+          <StatChip label="Win Rate" value={`${winRate}%`} />
+          <StatChip label="Sharpe" value={sharpe} className={parseFloat(sharpe) > 1 ? 'pos' : ''} />
         </div>
         <div className="status-badge">
           <div className="dot"></div>
@@ -265,11 +287,10 @@ function App() {
           </div>
 
           <div className="indicator-grid">
-            <Indicator label="EMA200 DEV" value="+3.2%" signal="↑ BULL" color="var(--green)" />
-            <Indicator label="RSI (14)" value="58.4" signal="neutral" color="var(--amber)" />
-            <Indicator label="ATR (14)" value="$1,240" signal="normal" color="var(--text2)" />
-            <Indicator label="VOLUME" value="1.8×" signal="above avg" color="var(--green)" />
-            <Indicator label="EMA9 / EMA21" value="↑ Cross" signal="bullish" color="var(--green)" />
+            <Indicator label="EMA200 DEV" value={`${dev200 > 0 ? '+' : ''}${dev200}%`} signal={btcSig.regime || "NEUTRAL"} color={dev200 > 0 ? 'var(--green)' : 'var(--red)'} />
+            <Indicator label="RSI (14)" value={rsi.toFixed(1)} signal={rsi > 70 ? "OVERBOUGHT" : rsi < 30 ? "OVERSOLD" : "neutral"} color={rsi > 70 ? 'var(--red)' : rsi < 30 ? 'var(--green)' : 'var(--text1)'} />
+            <Indicator label="ATR (1h)" value={`$${atr.toFixed(2)}`} signal="normal" color="var(--blue)" />
+            <Indicator label="EMA9 / EMA21" value={btcSig.buy_votes > btcSig.sell_votes ? "↑ Cross" : "↓ Cross"} signal={btcSig.buy_votes > btcSig.sell_votes ? "bullish" : "bearish"} color={btcSig.buy_votes > btcSig.sell_votes ? 'var(--green)' : 'var(--red)'} />
             <Indicator label="CIRCUIT BRKR" value="ARMED" signal="DD: 0.8%" color="var(--green)" />
           </div>
 
