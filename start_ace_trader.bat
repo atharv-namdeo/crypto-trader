@@ -5,7 +5,7 @@ echo           ACE TRADER - SOVEREIGN OMEGA
 echo ======================================================
 echo.
 echo [1/2] Starting Sovereign Core Engine (Python API)...
-start cmd /k "python sovereign_local_live.py"
+start cmd /k "python sovereign.py"
 
 echo [2/2] Starting ACE Dashboard (React)...
 cd dashboard
