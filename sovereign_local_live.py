@@ -4,7 +4,9 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
-import ccxt.async_support as ccxt
+import ccxt # Use sync CCXT for better stability on Windows
+import pandas as pd
+import json
 
 from core.state_manager import StateManager
 from core.risk import RiskManager
@@ -29,7 +31,7 @@ app.add_middleware(
 # Global State
 state = StateManager()
 risk  = RiskManager()
-engine = None # Will be initialized in startup
+engine = None 
 
 @app.get("/status")
 async def get_status():
@@ -46,90 +48,122 @@ async def get_status():
 @app.get("/history")
 async def get_history():
     history = await state.get("trade_history") or []
-    return history[-50:] # Last 50 trades
+    return history[-100:]
+
+@app.post("/strategy/check")
+async def force_strategy_check():
+    log.info("🎯 Manual Strategy Check Triggered.")
+    asyncio.create_task(run_full_evaluation())
+    return {"status": "Evaluation started"}
+
+async def run_full_evaluation():
+    # Helper to run sync work in thread
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, sync_evaluation)
+
+def sync_evaluation():
+    ex = ccxt.binance({"enableRateLimit": True, "timeout": 20000})
+    symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT', 'DOGE/USDT', 'SHIB/USDT', 'AVAX/USDT', 'LINK/USDT']
+    try:
+        ex.load_markets()
+        for symbol in symbols:
+            sync_process_symbol(symbol, ex)
+    except Exception as e:
+        log.error(f"Sync Eval Error: {e}")
+    finally:
+        # ccxt sync doesn't strictly need close but good practice
+        pass
+
+def sync_process_symbol(symbol, ex):
+    """Stub for sync evaluation logic if needed."""
+    pass
+
+# --- REFACTORING TO HYBRID ---
 
 async def trading_loop():
-    """Main Live Trading Loop"""
     global engine
-    log.info("💎 Sovereign Trading Loop Started.")
+    log.info("💎 Sovereign Trading Loop Started (Sync-Hybrid Mode).")
     
-    # Initialize Engine (Ensemble Algorithm)
+    await state.connect()
     engine = EnsembleAlgorithm(state)
     
-    # 1. Recovery First
+    # 1. Recovery
     recovery = RecoveryEngine(state, risk)
     await recovery.run_recovery_sequence()
     await recovery.close()
     
-    exchange = ccxt.binance({"enableRateLimit": True})
+    ex = ccxt.binance({"enableRateLimit": True, "timeout": 20000})
     symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT', 'DOGE/USDT', 'SHIB/USDT', 'AVAX/USDT', 'LINK/USDT']
+    
+    last_hour = -1
 
     while True:
         try:
             now = datetime.now(timezone.utc)
             
-            # Update Heartbeat
+            # Heartbeat
             with open("heartbeat.json", 'w') as f:
-                import json
                 json.dump({"timestamp": int(now.timestamp() * 1000), "time_str": str(now)}, f)
 
-            # --- 1. Hourly Strategy Check ---
-            if now.minute == 0:
-                log.info("🕒 Hour mark reached. Evaluating strategy ensemble...")
+            # Strategy Check
+            if now.hour != last_hour:
+                log.info(f"🕒 Hour transition ({now.hour}:00). Running Ensemble...")
                 for symbol in symbols:
-                    await process_symbol(symbol, exchange)
+                    await process_symbol_hybrid(symbol, ex)
+                last_hour = now.hour
 
-            # --- 2. Real-time Tracking (Every 30s) ---
-            # Track TP/SL for active positions
+            # Real-time Tracking
             active_positions = await state.get_all_positions()
-            for symbol, pos in active_positions.items():
-                ticker = await exchange.fetch_ticker(symbol)
-                price = ticker['last']
-                await track_position(symbol, pos, price)
+            if active_positions:
+                for symbol, pos in active_positions.items():
+                    # Use run_in_executor for the sync fetch_ticker
+                    ticker = await asyncio.get_event_loop().run_in_executor(None, ex.fetch_ticker, symbol)
+                    await track_position(symbol, pos, ticker['last'])
 
-            await asyncio.sleep(30)
+            await asyncio.sleep(20)
 
         except Exception as e:
-            log.error(f"Error in main loop: {e}")
+            log.error(f"Loop Error: {e}")
             await asyncio.sleep(10)
 
-async def process_symbol(symbol, exchange):
-    """Fetches data and generates signals for a symbol."""
+async def process_symbol_hybrid(symbol, ex):
     try:
-        # Fetch data needed for strategy
-        ohlcv = await exchange.fetch_ohlcv(symbol, '1h', limit=200)
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        loop = asyncio.get_event_loop()
+        # Fetch data in thread
+        data = await loop.run_in_executor(None, fetch_mtf_sync, symbol, ex)
         
-        # Save to state for engine to read
-        await state.set_df(f"ohlcv:1h:{symbol}", df)
+        # Save to state
+        await state.set_df(f"ohlcv:1h:{symbol}", pd.DataFrame(data['1h'], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']))
+        await state.set_df(f"ohlcv:1d:{symbol}", pd.DataFrame(data['1d'], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']))
+        await state.set_df(f"ohlcv:1m:{symbol}", pd.DataFrame(data['1m'], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']))
         
-        # Generate Signal
         signal = await engine.generate_signal(symbol)
         
-        if signal["action"] != "NEUTRAL":
-            log.info(f"🚀 SIGNAL: {symbol} {signal['action']} | Confidence: {signal['score']:.2f}")
-            await execute_signal(symbol, signal, exchange)
+        if signal["action"] in ("BUY", "SELL"):
+            log.info(f"🚀 SIGNAL: {symbol} {signal['action']} | Conf: {signal['confidence']:.2f}")
+            ticker = await loop.run_in_executor(None, ex.fetch_ticker, symbol)
+            await execute_signal_fixed(symbol, signal, ticker['last'])
+        else:
+            log.info(f"ℹ️ {symbol} Neutral ({signal['action']}) | {signal.get('reason', '')}")
 
     except Exception as e:
-        log.error(f"Error processing {symbol}: {e}")
+        log.error(f"Process Error {symbol}: {e}")
 
-async def execute_signal(symbol, signal, exchange):
-    """Sizes and 'executes' a signal into an active position."""
+def fetch_mtf_sync(symbol, ex):
+    return {
+        '1h': ex.fetch_ohlcv(symbol, '1h', limit=200),
+        '1d': ex.fetch_ohlcv(symbol, '1d', limit=250),
+        '1m': ex.fetch_ohlcv(symbol, '1m', limit=100)
+    }
+
+async def execute_signal_fixed(symbol, signal, price):
     balance = await state.get_float("portfolio:balance") or 10000.0
-    ticker = await exchange.fetch_ticker(symbol)
-    price = ticker['last']
-    
-    # Calculate Sizing
-    size_info = await risk.compute_position_size(
-        capital=balance,
-        price=price,
-        atr=signal.get("atr", price * 0.02)
-    )
+    atr = signal.get("atr", price * 0.02)
+    size_info = await risk.compute_position_size(balance, price, atr)
     
     if size_info["qty"] <= 0: return
 
-    # Calculate Stops
-    stops = risk.calculate_adaptive_stops(price, signal.get("atr", price * 0.02), signal.get("regime", "NEUTRAL"), signal["action"])
+    stops = risk.calculate_adaptive_stops(price, atr, signal.get("regime", "BULL"), signal["action"])
     
     position = {
         "symbol": symbol,
@@ -141,16 +175,11 @@ async def execute_signal(symbol, signal, exchange):
         "thinking": signal.get("metadata", {}),
         "opened_at": int(datetime.now(timezone.utc).timestamp() * 1000)
     }
-    
     await state.set_position(symbol, position)
     log.info(f"✅ POSITION OPENED: {symbol} @ {price}")
 
 async def track_position(symbol, pos, current_price):
-    """Checks SL/TP hits in real-time."""
-    side = pos["side"]
-    sl = pos["sl"]
-    tp = pos["tp"]
-    
+    side, sl, tp = pos["side"], pos["sl"], pos["tp"]
     hit = False
     if side == "LONG":
         if current_price <= sl: hit, reason = True, "STOP_LOSS"
@@ -161,19 +190,14 @@ async def track_position(symbol, pos, current_price):
         
     if hit:
         log.info(f"💥 {symbol} hit {reason} @ {current_price}")
-        # Settlement logic similar to recovery_engine
-        # (For brevity, I'll assume settlement updates state/balance)
-        # ... implementation omitted for space but mirrors _settle_offline_trade ...
-        pass
+        # Settlement logic (simplified)
+        await state.remove_position(symbol)
+        # ... balance update logic ...
 
 async def main():
-    await state.connect()
-    # Run API and Trading Loop concurrently
     api_task = asyncio.create_task(asyncio.to_thread(uvicorn.run, app, host="0.0.0.0", port=8000))
     trade_task = asyncio.create_task(trading_loop())
-    
     await asyncio.gather(api_task, trade_task)
 
 if __name__ == "__main__":
-    import pandas as pd # Ensure pandas is available for trading_loop
     asyncio.run(main())
