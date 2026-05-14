@@ -16,9 +16,10 @@ class RSIReversionStrategy:
         rsi_prev = RSIReversionStrategy._calculate_rsi(closes[:-1])
 
         # Import phase enum context
-        from core.strategies.regime import MarketPhase
+        # Bullish regimes
+        is_bullish = phase.value in ("TRENDING_BULL", "RANGING_BULL", "VOLATILE_BULL", "EXPLOSION", "COMPRESSION")
 
-        if phase == MarketPhase.BULL:
+        if is_bullish:
             if rsi_prev < 35 and rsi_now >= 35:
                 return {"action": "BUY", "score": 0.72, "rsi": rsi_now}
             if rsi_now < 45:

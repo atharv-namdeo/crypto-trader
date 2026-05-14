@@ -149,17 +149,32 @@ class RiskManager:
                                   regime: str,
                                   side:  str = "LONG") -> dict:
         """
-        Phase 9.5: balanced — 1.8×ATR stop, 5.4×ATR TP (3:1 RR).
+        PHASE 11 — Ultra-Adaptive Stops based on 8 Granular Regimes.
         """
-        sl_dist = atr * 1.8
-        tp_dist = atr * 5.4
+        # Multiplier Matrix (SL, TP)
+        matrix = {
+            "EXPLOSION":     (1.5, 3.0), # Fast in, fast out
+            "COMPRESSION":   (1.2, 4.0), # Tight stop for breakout
+            "TRENDING_BULL": (2.0, 6.0), # Wide TP to ride trend
+            "TRENDING_BEAR": (2.0, 6.0),
+            "VOLATILE_BULL": (3.0, 5.0), # High tolerance for noise
+            "VOLATILE_BEAR": (3.0, 5.0),
+            "RANGING_BULL":  (1.5, 2.5), # Quick mean reversion
+            "RANGING_BEAR":  (1.5, 2.5),
+            "NEUTRAL":       (1.8, 5.4), # Default
+        }
+        
+        sl_mult, tp_mult = matrix.get(regime, (1.8, 5.4))
+        
+        sl_dist = atr * sl_mult
+        tp_dist = atr * tp_mult
 
         if side == "LONG":
             return {"stop": price - sl_dist, "tp": price + tp_dist,
-                    "sl_mult": 1.8, "tp_mult": 5.4}
+                    "sl_mult": sl_mult, "tp_mult": tp_mult}
         else:
             return {"stop": price + sl_dist, "tp": price - tp_dist,
-                    "sl_mult": 1.8, "tp_mult": 5.4}
+                    "sl_mult": sl_mult, "tp_mult": tp_mult}
 
     def validate_trade(self, side, entry, stop, tp, qty, capital, current_heat=0.0) -> bool:
         if entry <= 0 or stop <= 0 or qty <= 0:

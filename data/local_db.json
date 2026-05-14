@@ -30,6 +30,295 @@
                 "wins": 0,
                 "pnl": 0.0
             }
+        },
+        "signals": {
+            "BTC": {
+                "USDT": {
+                    "symbol": "BTC/USDT",
+                    "action": "SELL",
+                    "confidence": 0.3358823529411765,
+                    "regime": "COMPRESSION",
+                    "multiplier": 0.5,
+                    "atr": 357.66571428571376,
+                    "rsi": 47.06616234508791,
+                    "ema20": 79680.42082773334,
+                    "ema50": 80080.31186716672,
+                    "price": 79375.99,
+                    "ema200": 80647.68204647493,
+                    "buy_votes": 1,
+                    "sell_votes": 9,
+                    "confirmed_b": true,
+                    "confirmed_s": true,
+                    "timestamp": 1778738989063,
+                    "reason": "[RANGING] Score:0.34 Weights: M:0.0 R:0.1 V:0.6 T:0.0 P:0.1 VCE:NEUTRAL MDT:SELL PEE:SELL"
+                }
+            },
+            "ETH": {
+                "USDT": {
+                    "symbol": "ETH/USDT",
+                    "action": "SELL",
+                    "confidence": 0.29411764705882354,
+                    "regime": "RANGING_BEAR",
+                    "multiplier": 0.8,
+                    "atr": 11.992857142857051,
+                    "rsi": 45.48132701104286,
+                    "ema20": 2263.8413920811727,
+                    "ema50": 2276.929390039028,
+                    "price": 2256.88,
+                    "ema200": 80647.68204647493,
+                    "buy_votes": 1,
+                    "sell_votes": 8,
+                    "confirmed_b": true,
+                    "confirmed_s": true,
+                    "timestamp": 1778738990720,
+                    "reason": "[RANGING] Score:0.29 Weights: M:0.0 R:0.5 V:0.2 T:0.0 P:0.0 VCE:NEUTRAL MDT:SELL PEE:SELL"
+                }
+            },
+            "SOL": {
+                "USDT": {
+                    "symbol": "SOL/USDT",
+                    "action": "SELL",
+                    "confidence": 0.30065743944636675,
+                    "regime": "RANGING_BEAR",
+                    "multiplier": 0.8,
+                    "atr": 0.6414285714285727,
+                    "rsi": 52.75139664730794,
+                    "ema20": 91.34370007670823,
+                    "ema50": 92.61529212902593,
+                    "price": 90.75,
+                    "ema200": 80647.68204647493,
+                    "buy_votes": 2,
+                    "sell_votes": 7,
+                    "confirmed_b": true,
+                    "confirmed_s": true,
+                    "timestamp": 1778738992070,
+                    "reason": "[TRENDING] Score:0.30 Weights: M:0.0 R:0.5 V:0.2 T:0.1 P:0.1 VCE:NEUTRAL MDT:SELL PEE:SELL"
+                }
+            },
+            "XRP": {
+                "USDT": {
+                    "symbol": "XRP/USDT",
+                    "action": "SELL",
+                    "confidence": 0.2944636678200692,
+                    "regime": "RANGING_BEAR",
+                    "multiplier": 0.8,
+                    "atr": 0.008628571428571399,
+                    "rsi": 50.7594672796926,
+                    "ema20": 1.4325068967471648,
+                    "ema50": 1.4375768050194435,
+                    "price": 1.4344,
+                    "ema200": 80647.68204647493,
+                    "buy_votes": 5,
+                    "sell_votes": 4,
+                    "confirmed_b": true,
+                    "confirmed_s": true,
+                    "timestamp": 1778738994766,
+                    "reason": "[RANGING] Score:0.29 Weights: M:0.0 R:0.6 V:0.2 T:0.0 P:0.0 VCE:NEUTRAL MDT:NEUTRAL PEE:SELL"
+                }
+            },
+            "ADA": {
+                "USDT": {
+                    "symbol": "ADA/USDT",
+                    "action": "SELL",
+                    "confidence": 0.28892733564013845,
+                    "regime": "RANGING_BEAR",
+                    "multiplier": 0.8,
+                    "atr": 0.0017642857142857143,
+                    "rsi": 50.39647554891421,
+                    "ema20": 0.26554104909067805,
+                    "ema50": 0.26848305230775654,
+                    "price": 0.2641,
+                    "ema200": 80647.68204647493,
+                    "buy_votes": 1,
+                    "sell_votes": 8,
+                    "confirmed_b": true,
+                    "confirmed_s": true,
+                    "timestamp": 1778738996174,
+                    "reason": "[TRENDING] Score:0.29 Weights: M:0.0 R:0.6 V:0.2 T:0.0 P:0.0 VCE:NEUTRAL MDT:SELL PEE:SELL"
+                }
+            },
+            "DOGE": {
+                "USDT": {
+                    "symbol": "DOGE/USDT",
+                    "action": "NEUTRAL",
+                    "confidence": 0.4028308823529412,
+                    "regime": "RANGING_BULL",
+                    "multiplier": 0.8,
+                    "atr": 0.0014307142857142871,
+                    "rsi": 49.18049849482725,
+                    "ema20": 0.11329890470478048,
+                    "ema50": 0.11230568849472489,
+                    "price": 0.11342,
+                    "ema200": 80647.68204647493,
+                    "buy_votes": 3,
+                    "sell_votes": 4,
+                    "confirmed_b": true,
+                    "confirmed_s": true,
+                    "timestamp": 1778738997671,
+                    "reason": "[COMPRESSION] Score:0.40 Weights: M:0.0 R:0.1 V:0.6 T:0.1 P:0.2 VCE:NEUTRAL MDT:BUY PEE:BUY"
+                }
+            },
+            "SHIB": {
+                "USDT": {
+                    "symbol": "SHIB/USDT",
+                    "action": "SELL",
+                    "confidence": 0.2975432525951557,
+                    "regime": "RANGING_BEAR",
+                    "multiplier": 0.8,
+                    "atr": 4.9285714285714176e-08,
+                    "rsi": 48.47435619995672,
+                    "ema20": 6.29775075899079e-06,
+                    "ema50": 6.360045475117779e-06,
+                    "price": 6.26e-06,
+                    "ema200": 80647.68204647493,
+                    "buy_votes": 1,
+                    "sell_votes": 9,
+                    "confirmed_b": true,
+                    "confirmed_s": true,
+                    "timestamp": 1778738998623,
+                    "reason": "[TRENDING] Score:0.30 Weights: M:0.0 R:0.5 V:0.2 T:0.1 P:0.1 VCE:NEUTRAL MDT:SELL PEE:SELL"
+                }
+            },
+            "AVAX": {
+                "USDT": {
+                    "symbol": "AVAX/USDT",
+                    "action": "SELL",
+                    "confidence": 0.30031141868512107,
+                    "regime": "RANGING_BEAR",
+                    "multiplier": 0.8,
+                    "atr": 0.07214285714285726,
+                    "rsi": 51.05386416264006,
+                    "ema20": 9.749245175558938,
+                    "ema50": 9.829420807171074,
+                    "price": 9.69,
+                    "ema200": 80647.68204647493,
+                    "buy_votes": 2,
+                    "sell_votes": 6,
+                    "confirmed_b": true,
+                    "confirmed_s": true,
+                    "timestamp": 1778739002465,
+                    "reason": "[TRENDING] Score:0.30 Weights: M:0.0 R:0.5 V:0.2 T:0.1 P:0.1 VCE:NEUTRAL MDT:SELL PEE:SELL"
+                }
+            },
+            "LINK": {
+                "USDT": {
+                    "symbol": "LINK/USDT",
+                    "action": "SELL",
+                    "confidence": 0.2923875432525952,
+                    "regime": "RANGING_BEAR",
+                    "multiplier": 0.8,
+                    "atr": 0.08499999999999996,
+                    "rsi": 52.290502787453576,
+                    "ema20": 10.245451723634735,
+                    "ema50": 10.305027546933662,
+                    "price": 10.24,
+                    "ema200": 80647.68204647493,
+                    "buy_votes": 2,
+                    "sell_votes": 5,
+                    "confirmed_b": true,
+                    "confirmed_s": true,
+                    "timestamp": 1778739005074,
+                    "reason": "[RANGING] Score:0.29 Weights: M:0.0 R:0.6 V:0.2 T:0.0 P:0.0 VCE:NEUTRAL MDT:SELL PEE:SELL"
+                }
+            }
+        },
+        "positions": {
+            "BTC": {
+                "USDT": {
+                    "symbol": "BTC/USDT",
+                    "side": "SHORT",
+                    "entry_price": 79375.99,
+                    "qty": 0.15532815513643602,
+                    "sl": 79805.18885714286,
+                    "tp": 77945.32714285715,
+                    "thinking": {},
+                    "opened_at": 1778758789293
+                }
+            },
+            "ETH": {
+                "USDT": {
+                    "symbol": "ETH/USDT",
+                    "side": "SHORT",
+                    "entry_price": 2256.88,
+                    "qty": 4.632387002845644,
+                    "sl": 2274.8692857142855,
+                    "tp": 2226.8978571428574,
+                    "thinking": {},
+                    "opened_at": 1778758790954
+                }
+            },
+            "SOL": {
+                "USDT": {
+                    "symbol": "SOL/USDT",
+                    "side": "SHORT",
+                    "entry_price": 90.75,
+                    "qty": 86.61222469685704,
+                    "sl": 91.71214285714287,
+                    "tp": 89.14642857142857,
+                    "thinking": {},
+                    "opened_at": 1778758792281
+                }
+            },
+            "XRP": {
+                "USDT": {
+                    "symbol": "XRP/USDT",
+                    "side": "SHORT",
+                    "entry_price": 1.4343,
+                    "qty": 2500.0,
+                    "sl": 1.447242857142857,
+                    "tp": 1.4127285714285713,
+                    "thinking": {},
+                    "opened_at": 1778758794970
+                }
+            },
+            "ADA": {
+                "USDT": {
+                    "symbol": "ADA/USDT",
+                    "side": "SHORT",
+                    "entry_price": 0.2641,
+                    "qty": 2500.0,
+                    "sl": 0.26674642857142855,
+                    "tp": 0.25968928571428573,
+                    "thinking": {},
+                    "opened_at": 1778758796387
+                }
+            },
+            "SHIB": {
+                "USDT": {
+                    "symbol": "SHIB/USDT",
+                    "side": "SHORT",
+                    "entry_price": 6.26e-06,
+                    "qty": 2500.0,
+                    "sl": 6.333928571428572e-06,
+                    "tp": 6.136785714285715e-06,
+                    "thinking": {},
+                    "opened_at": 1778758799179
+                }
+            },
+            "AVAX": {
+                "USDT": {
+                    "symbol": "AVAX/USDT",
+                    "side": "SHORT",
+                    "entry_price": 9.69,
+                    "qty": 770.0770077007688,
+                    "sl": 9.798214285714286,
+                    "tp": 9.509642857142856,
+                    "thinking": {},
+                    "opened_at": 1778758802667
+                }
+            },
+            "LINK": {
+                "USDT": {
+                    "symbol": "LINK/USDT",
+                    "side": "SHORT",
+                    "entry_price": 10.24,
+                    "qty": 653.5947712418304,
+                    "sl": 10.3675,
+                    "tp": 10.0275,
+                    "thinking": {},
+                    "opened_at": 1778758805274
+                }
+            }
         }
     },
     "market": {

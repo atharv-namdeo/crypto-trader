@@ -148,31 +148,40 @@ class EnsembleAlgorithm:
             # 8. Action decision
             action = "NEUTRAL"
 
-            # Votes from all 5 strategies
+            # Votes from all 5 strategies + legacy block
             buy_votes  = sum([
                 momentum_sig["action"] == "BUY", 
                 rsi_sig["action"] == "BUY",
                 vce_sig["action"] == "BUY",
                 mdt_sig["action"] == "BUY",
                 pulse_sig["action"] == "BUY"
-            ])
+            ]) + sum([s["action"] == "BUY" for s in legacy_signals.values()])
+            
             sell_votes = sum([
                 momentum_sig["action"] == "SELL", 
                 rsi_sig["action"] == "SELL",
                 vce_sig["action"] == "SELL",
                 mdt_sig["action"] == "SELL",
                 pulse_sig["action"] == "SELL"
-            ])
+            ]) + sum([s["action"] == "SELL" for s in legacy_signals.values()])
 
-            if phase == MarketPhase.BULL:
-                # Phase 9.5: Balanced selectivity
-                if base_score >= 0.65 and buy_votes >= 1 and confirmed_b:
-                    action = "BUY"
+            # --- GRANULAR DECISION LOGIC ---
+            
+            # 1. Determine direction allowed by regime
+            allow_long = phase in (MarketPhase.TRENDING_BULL, MarketPhase.RANGING_BULL, MarketPhase.VOLATILE_BULL, MarketPhase.EXPLOSION, MarketPhase.COMPRESSION)
+            allow_short = phase in (MarketPhase.TRENDING_BEAR, MarketPhase.RANGING_BEAR, MarketPhase.VOLATILE_BEAR, MarketPhase.EXPLOSION, MarketPhase.COMPRESSION)
 
-            elif phase == MarketPhase.BEAR:
-                # Phase 9.5: Balanced selectivity
-                if (1 - base_score) >= 0.65 and sell_votes >= 1 and confirmed_s:
-                    action = "SELL"
+            # 2. Score check (Adaptive Selectivity)
+            # Explosion needs higher confidence, Ranging needs mean reversion extremes
+            threshold = 0.65
+            if phase == MarketPhase.EXPLOSION: threshold = 0.75 # Don't chase false breakouts
+            if phase == MarketPhase.COMPRESSION: threshold = 0.60 # Be more sensitive to first breakout
+
+            if allow_long and base_score >= threshold and buy_votes >= 2:
+                if confirmed_b: action = "BUY"
+                
+            elif allow_short and (1.0 - base_score) >= threshold and sell_votes >= 2:
+                if confirmed_s: action = "SELL"
 
             # 9. Macro conflict check (BTC EMA200 filter)
             if symbol == "BTC/USDT":
@@ -324,26 +333,39 @@ class EnsembleAlgorithm:
         return "MACRO"
 
     def _get_adaptive_weights(self, state: str, profile: str, phase: MarketPhase) -> Dict[str, float]:
-        """The core decision matrix. Allocates weights based on all conditions."""
-        # Default (Phase 10)
-        weights = {"MOM": 0.3, "RSI": 0.2, "VCE": 0.2, "MDT": 0.15, "PEE": 0.15}
-        
-        # Condition 1: Neutral Regime (Choppy)
-        if phase == MarketPhase.NEUTRAL:
-            return {"MOM": 0.1, "RSI": 0.4, "VCE": 0.5, "MDT": 0.0, "PEE": 0.0}
+        """
+        ULTRA-GRANULAR PHASE 11 WEIGHT MATRIX
+        Dynamically adjusts strategy importance based on 8 high-res market regimes.
+        """
+        # Default Weights
+        weights = {"MOM": 0.2, "RSI": 0.2, "VCE": 0.2, "MDT": 0.2, "PEE": 0.2, "LEGACY": 0.2}
+
+        if phase == MarketPhase.COMPRESSION or state == "COMPRESSION":
+            # Breakout Fishing: VCE and Legacy Breakouts (Ichimoku/Donchian)
+            weights = {"MOM": 0.0, "RSI": 0.1, "VCE": 0.6, "MDT": 0.0, "PEE": 0.1, "LEGACY": 0.4}
             
-        # Condition 2: High Compression (Wait for VCE breakout)
-        if state == "COMPRESSION":
-            return {"MOM": 0.1, "RSI": 0.1, "VCE": 0.8, "MDT": 0.0, "PEE": 0.0}
+        elif phase == MarketPhase.EXPLOSION or state == "EXPANSION":
+            # Ride the momentum: Pulse, MDT, and Trend
+            weights = {"MOM": 0.3, "RSI": 0.0, "VCE": 0.0, "MDT": 0.4, "PEE": 0.5, "LEGACY": 0.2}
             
-        # Condition 3: Strong Expansion (Ride the MDT trail)
-        if state == "EXPANSION":
-            return {"MOM": 0.2, "RSI": 0.0, "VCE": 0.0, "MDT": 0.5, "PEE": 0.3}
+        elif phase in (MarketPhase.TRENDING_BULL, MarketPhase.TRENDING_BEAR):
+            # Pure Trend: MDT and Momentum
+            weights = {"MOM": 0.4, "RSI": 0.1, "VCE": 0.1, "MDT": 0.5, "PEE": 0.2, "LEGACY": 0.1}
             
-        # Condition 4: Asset Specific Bias
-        if profile == "TRENDER" and state == "TRENDING":
-            weights = {"MOM": 0.2, "RSI": 0.1, "VCE": 0.1, "MDT": 0.3, "PEE": 0.3}
+        elif phase in (MarketPhase.RANGING_BULL, MarketPhase.RANGING_BEAR):
+            # Sideways: RSI and Legacy Mean Reversion (BBands/Pivots)
+            weights = {"MOM": 0.0, "RSI": 0.5, "VCE": 0.2, "MDT": 0.0, "PEE": 0.0, "LEGACY": 0.6}
+            
+        elif phase in (MarketPhase.VOLATILE_BULL, MarketPhase.VOLATILE_BEAR):
+            # Choppy: High weight on VCE (reversals) and RSI
+            weights = {"MOM": 0.2, "RSI": 0.3, "VCE": 0.4, "MDT": 0.1, "PEE": 0.1, "LEGACY": 0.3}
+
+        # Asset Profile Adjustments
+        if profile == "TRENDER":
+            weights["MDT"] += 0.1
+            weights["PEE"] += 0.1
         elif profile == "RANGER":
-            weights = {"MOM": 0.2, "RSI": 0.4, "VCE": 0.4, "MDT": 0.0, "PEE": 0.0}
+            weights["RSI"] += 0.1
+            weights["LEGACY"] += 0.1
             
         return weights
