@@ -12,8 +12,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [gapDetected, setGapDetected] = useState(false);
   const [log, setLog] = useState([
-    { time: "14:32:07", msg: "System initialized. Phase 9 engine active.", type: "info" },
-    { time: "14:32:08", msg: "Regime: BULL. EMA200 deviation: +3.2%.", type: "info" }
+    { time: "14:32:07", msg: "System initialized. Phase 11 Omega Brain engine active.", type: "info" },
+    { time: "14:32:08", msg: "Regime detected. Adaptive weighting enabled for all assets.", type: "info" }
   ]);
   const [backtestDate, setBacktestDate] = useState("2026-05-10");
   const [backtesting, setBacktesting] = useState(false);
@@ -80,7 +80,7 @@ function App() {
 
       {/* TOPBAR */}
       <div className="topbar">
-        <div className="logo">ACE<span>/</span>TRADER <span style={{ color: 'var(--text2)', fontWeight: 300 }}>PHASE 9</span></div>
+        <div className="logo">ACE<span>/</span>TRADER <span style={{ color: 'var(--text2)', fontWeight: 300 }}>{status?.phase || "PHASE 11"}</span></div>
         <div className="topbar-center">
           <StatChip label="Balance" value={`$${balance.toLocaleString()}`} />
           <StatChip label="Today P&L" value={`+$${dayPnl.toFixed(2)} (+3.38%)`} className="pos" />

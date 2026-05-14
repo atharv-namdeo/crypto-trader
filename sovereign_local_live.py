@@ -39,6 +39,7 @@ async def get_status():
     positions = await state.get_all_positions()
     return {
         "status": "Running",
+        "phase": "Phase 11: Omega Brain",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "balance": balance,
         "active_trades": len(positions),
@@ -190,9 +191,38 @@ async def track_position(symbol, pos, current_price):
         
     if hit:
         log.info(f"💥 {symbol} hit {reason} @ {current_price}")
-        # Settlement logic (simplified)
+        
+        # Calculate PnL
+        qty = pos["qty"]
+        entry = pos["entry_price"]
+        if side == "LONG":
+            raw_pnl = (current_price - entry) * qty
+        else:
+            raw_pnl = (entry - current_price) * qty
+            
+        # Update Balance
+        balance = await state.get_float("portfolio:balance") or 10000.0
+        new_balance = balance + raw_pnl
+        await state.set("portfolio:balance", new_balance)
+        
+        # Record History
+        trade_record = {
+            "symbol": symbol,
+            "side": side,
+            "entry": entry,
+            "exit": current_price,
+            "qty": qty,
+            "pnl": raw_pnl,
+            "pnl_pct": (raw_pnl / (entry * qty)) * 100,
+            "reason": reason,
+            "closed_at": int(datetime.now(timezone.utc).timestamp() * 1000)
+        }
+        history = await state.get("trade:history") or []
+        history.append(trade_record)
+        await state.set("trade:history", history)
+        
         await state.remove_position(symbol)
-        # ... balance update logic ...
+        log.info(f"💰 {symbol} CLOSED. PnL: {raw_pnl:.2f} | New Balance: {new_balance:.2f}")
 
 async def main():
     api_task = asyncio.create_task(asyncio.to_thread(uvicorn.run, app, host="0.0.0.0", port=8000))
